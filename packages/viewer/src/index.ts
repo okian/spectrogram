@@ -84,6 +84,29 @@ export interface SpectroFrame {
   bins: Float32Array | Uint16Array | Uint8Array;
 }
 
+/** Default metadata values when none are supplied. */
+export const DEFAULT_SPECTRO_META: SpectroMeta = {
+  streamId: 'default',
+  channels: 1,
+  sampleRateHz: 48000,
+  nfft: 2048,
+  hopSize: 512,
+  binCount: 1025,
+  freqStartHz: 0,
+  freqStepHz: 1,
+  scale: 'dbfs',
+  window: 'hann',
+};
+
+/** Default viewer configuration. */
+export const DEFAULT_SPECTRO_CONFIG: SpectroConfig = {
+  timeWindowSec: 15,
+  freqScale: 'log',
+  dbFloor: -100,
+  dbCeiling: 0,
+  palette: 'viridis',
+};
+
 /** Declarative configuration for the viewer. */
 export interface SpectroConfig {
   /** Rendering mode of the viewer. */
@@ -170,18 +193,21 @@ export interface SpectrogramProps {
 export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
   function SpectrogramComponent(props, ref) {
     const { config, className, style, onReady, onHover, onClick } = props;
-    const [frameCount, setFrameCount] = React.useState(0);
-    const [size, setSize] = React.useState<{ width?: number; height?: number }>(
-      {
-        width: config?.width,
-        height: config?.height,
-      },
-    );
-    const configRef = React.useRef<SpectroConfig>(config ?? {});
+    const configRef = React.useRef<SpectroConfig>({
+      ...DEFAULT_SPECTRO_CONFIG,
+      ...(config ?? {}),
+    });
     const controllerRef = React.useRef(new Controller(configRef.current));
     const ingestRef = React.useRef(new DataIngest(controllerRef.current));
     const metaRef = React.useRef<SpectroMeta | null>(null);
     const canvasRef = React.useRef<HTMLCanvasElement>(null);
+    const [frameCount, setFrameCount] = React.useState(0);
+    const [size, setSize] = React.useState<{ width?: number; height?: number }>(
+      {
+        width: configRef.current.width,
+        height: configRef.current.height,
+      },
+    );
 
     const api = React.useMemo<SpectrogramAPI>(
       () => ({
@@ -223,9 +249,10 @@ export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
     React.useImperativeHandle(ref, () => api, [api]);
 
     React.useEffect(() => {
-      controllerRef.current.setConfig(config ?? {});
-      configRef.current = config ?? {};
-      setSize({ width: config?.width, height: config?.height });
+      const merged = { ...DEFAULT_SPECTRO_CONFIG, ...(config ?? {}) };
+      controllerRef.current.setConfig(merged);
+      configRef.current = merged;
+      setSize({ width: merged.width, height: merged.height });
     }, [config]);
 
     React.useEffect(() => {

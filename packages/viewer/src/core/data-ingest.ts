@@ -8,23 +8,29 @@ import { CoreBuffer, FrameBins } from './core-buffer';
 export class DataIngest {
   private buffers: CoreBuffer[] = [];
   private lastFrameIndex: number[] = [];
-  private meta: SpectroMeta | null = null;
+  private meta: SpectroMeta;
 
-  constructor(private controller: Controller) {}
-
-  setMeta(meta: SpectroMeta): void {
-    this.meta = meta;
-    this.controller.setMeta(meta);
-    // reallocate buffers per channel
+  constructor(private controller: Controller) {
+    this.meta = controller.getMeta();
     this.buffers = Array.from(
-      { length: meta.channels },
+      { length: this.meta.channels },
       () => new CoreBuffer(this.controller.maxRows),
     );
-    this.lastFrameIndex = Array(meta.channels).fill(-1);
+    this.lastFrameIndex = Array(this.meta.channels).fill(-1);
+  }
+
+  setMeta(meta: SpectroMeta): void {
+    this.controller.setMeta(meta);
+    this.meta = this.controller.getMeta();
+    // reallocate buffers per channel
+    this.buffers = Array.from(
+      { length: this.meta.channels },
+      () => new CoreBuffer(this.controller.maxRows),
+    );
+    this.lastFrameIndex = Array(this.meta.channels).fill(-1);
   }
 
   pushFrame(frame: SpectroFrame): void {
-    if (!this.meta) return;
     if (frame.channelId < 0 || frame.channelId >= this.meta.channels) return;
     const last = this.lastFrameIndex[frame.channelId];
     if (frame.frameIndex <= last) {
