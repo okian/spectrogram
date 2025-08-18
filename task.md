@@ -38,7 +38,7 @@
 
 ## 4. Rendering Modes
 
-- [ ] Implement base renderer interface for pluggable view modes.
+- [x] Implement base renderer interface for pluggable view modes.
 - [ ] Build 2D heatmap renderer using WebGL2 textures and palettes.
 - [ ] Build 2D waterfall renderer stacking time slices vertically.
 - [ ] Build 3D waterfall renderer with heightfield mesh and optional wireframe.
