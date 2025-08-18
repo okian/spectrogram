@@ -1,13 +1,12 @@
-import { describe, it, expect } from 'vitest';
 import { Controller } from '../src/core';
 import {
   SpectroMeta,
   DEFAULT_SPECTRO_CONFIG,
   DEFAULT_SPECTRO_META,
-} from '../src/index';
+} from '../src';
 
 describe('Controller', () => {
-  it('derives maxRows from config and meta', () => {
+  test('derives maxRows from config and meta', () => {
     const c = new Controller({ timeWindowSec: 1 });
     const meta: SpectroMeta = {
       streamId: 's',
@@ -26,7 +25,7 @@ describe('Controller', () => {
     expect(c.maxRows).toBe(5);
   });
 
-  it('provides default config and meta', () => {
+  test('provides default config and meta', () => {
     const c = new Controller();
     expect(c.getConfig()).toMatchObject({
       timeWindowSec: DEFAULT_SPECTRO_CONFIG.timeWindowSec,
@@ -42,7 +41,7 @@ describe('Controller', () => {
     });
   });
 
-  it('allows overriding defaults', () => {
+  test('allows overriding defaults', () => {
     const c = new Controller();
     c.setConfig({
       palette: 'turbo',
@@ -60,7 +59,7 @@ describe('Controller', () => {
     });
   });
 
-  it('computes maxRows from default settings', () => {
+  test('computes maxRows from default settings', () => {
     const c = new Controller();
     const expected = Math.ceil(
       DEFAULT_SPECTRO_CONFIG.timeWindowSec! /
