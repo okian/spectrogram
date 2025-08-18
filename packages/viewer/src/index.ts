@@ -37,6 +37,12 @@ export type Palette =
   | PaletteName
   | { name: string; lut: Uint8Array | number[] };
 
+/** Basic runtime statistics from the viewer. */
+export interface SpectrogramStats {
+  /** Number of buffered frames. */
+  frameCount: number;
+}
+
 /** Stream metadata describing the audio stream. */
 export interface SpectroMeta {
   /** Unique identifier for the stream. */
@@ -133,6 +139,12 @@ export interface SpectrogramAPI {
   pushFrames(frames: SpectroFrame[]): void;
   /** Clear all buffered frames. */
   clear(): void;
+  /** Resize the viewer to a new width and height. */
+  resize(width: number, height: number): void;
+  /** Export the current view as a PNG data URL. */
+  toPng(): string;
+  /** Retrieve runtime statistics about the viewer. */
+  getStats(): SpectrogramStats;
 }
 
 /** Props accepted by the Spectrogram component. */
@@ -145,15 +157,27 @@ export interface SpectrogramProps {
   style?: React.CSSProperties;
   /** Called when the component is ready and exposes its API. */
   onReady?(api: SpectrogramAPI): void;
+  /** Fired when the pointer moves over the viewer. */
+  onHover?(event: React.MouseEvent<HTMLDivElement>): void;
+  /** Fired when the viewer is clicked. */
+  onClick?(event: React.MouseEvent<HTMLDivElement>): void;
 }
 
 /** Minimal spectrogram viewer component. */
 export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
   function SpectrogramComponent(props, ref) {
-    const { config, className, style, onReady } = props;
+    const { config, className, style, onReady, onHover, onClick } = props;
     const [frames, setFrames] = React.useState<SpectroFrame[]>([]);
+    const framesRef = React.useRef<SpectroFrame[]>(frames);
+    const [size, setSize] = React.useState<{ width?: number; height?: number }>(
+      {
+        width: config?.width,
+        height: config?.height,
+      },
+    );
     const configRef = React.useRef<SpectroConfig>(config ?? {});
     const metaRef = React.useRef<SpectroMeta | null>(null);
+    const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
     const api = React.useMemo<SpectrogramAPI>(
       () => ({
@@ -172,6 +196,16 @@ export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
         clear() {
           setFrames([]);
         },
+        resize(width, height) {
+          configRef.current = { ...configRef.current, width, height };
+          setSize({ width, height });
+        },
+        toPng() {
+          return canvasRef.current?.toDataURL('image/png') ?? '';
+        },
+        getStats() {
+          return { frameCount: framesRef.current.length };
+        },
       }),
       [],
     );
@@ -179,17 +213,35 @@ export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
     React.useImperativeHandle(ref, () => api, [api]);
 
     React.useEffect(() => {
+      framesRef.current = frames;
+    }, [frames]);
+
+    React.useEffect(() => {
       configRef.current = config ?? {};
+      setSize({ width: config?.width, height: config?.height });
     }, [config]);
 
     React.useEffect(() => {
       onReady?.(api);
     }, [onReady, api]);
 
-    return React.createElement('div', {
-      className,
-      style,
-      'data-frame-count': frames.length,
-    });
+    return React.createElement(
+      'div',
+      {
+        className,
+        style,
+        'data-frame-count': frames.length,
+        'data-width': size.width,
+        'data-height': size.height,
+        onMouseMove: onHover,
+        onClick,
+      },
+      React.createElement('canvas', {
+        ref: canvasRef,
+        style: { display: 'none' },
+        width: size.width,
+        height: size.height,
+      }),
+    );
   },
 );
