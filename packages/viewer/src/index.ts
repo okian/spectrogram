@@ -1,5 +1,6 @@
 import React from 'react';
 import { DataIngest, Controller } from './core';
+export * from './renderers';
 
 /** Return the version string of the viewer package. */
 export function viewerVersion(): string {
