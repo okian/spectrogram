@@ -1,4 +1,5 @@
 import React from 'react';
+import { DataIngest, Controller } from './core';
 
 /** Return the version string of the viewer package. */
 export function viewerVersion(): string {
@@ -167,8 +168,7 @@ export interface SpectrogramProps {
 export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
   function SpectrogramComponent(props, ref) {
     const { config, className, style, onReady, onHover, onClick } = props;
-    const [frames, setFrames] = React.useState<SpectroFrame[]>([]);
-    const framesRef = React.useRef<SpectroFrame[]>(frames);
+    const [frameCount, setFrameCount] = React.useState(0);
     const [size, setSize] = React.useState<{ width?: number; height?: number }>(
       {
         width: config?.width,
@@ -176,27 +176,35 @@ export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
       },
     );
     const configRef = React.useRef<SpectroConfig>(config ?? {});
+    const controllerRef = React.useRef(new Controller(configRef.current));
+    const ingestRef = React.useRef(new DataIngest(controllerRef.current));
     const metaRef = React.useRef<SpectroMeta | null>(null);
     const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
     const api = React.useMemo<SpectrogramAPI>(
       () => ({
         setConfig(next) {
+          controllerRef.current.setConfig(next);
           configRef.current = { ...configRef.current, ...next };
         },
         setMeta(meta) {
           metaRef.current = meta;
+          ingestRef.current.setMeta(meta);
         },
         pushFrame(frame) {
-          setFrames((f) => [...f, frame]);
+          ingestRef.current.pushFrame(frame);
+          setFrameCount(ingestRef.current.getStats().frameCount);
         },
         pushFrames(frs) {
-          setFrames((f) => [...f, ...frs]);
+          ingestRef.current.pushFrames(frs);
+          setFrameCount(ingestRef.current.getStats().frameCount);
         },
         clear() {
-          setFrames([]);
+          ingestRef.current.clear();
+          setFrameCount(ingestRef.current.getStats().frameCount);
         },
         resize(width, height) {
+          controllerRef.current.setConfig({ width, height });
           configRef.current = { ...configRef.current, width, height };
           setSize({ width, height });
         },
@@ -204,7 +212,7 @@ export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
           return canvasRef.current?.toDataURL('image/png') ?? '';
         },
         getStats() {
-          return { frameCount: framesRef.current.length };
+          return ingestRef.current.getStats();
         },
       }),
       [],
@@ -213,10 +221,7 @@ export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
     React.useImperativeHandle(ref, () => api, [api]);
 
     React.useEffect(() => {
-      framesRef.current = frames;
-    }, [frames]);
-
-    React.useEffect(() => {
+      controllerRef.current.setConfig(config ?? {});
       configRef.current = config ?? {};
       setSize({ width: config?.width, height: config?.height });
     }, [config]);
@@ -230,7 +235,7 @@ export const Spectrogram = React.forwardRef<SpectrogramAPI, SpectrogramProps>(
       {
         className,
         style,
-        'data-frame-count': frames.length,
+        'data-frame-count': frameCount,
         'data-width': size.width,
         'data-height': size.height,
         onMouseMove: onHover,
