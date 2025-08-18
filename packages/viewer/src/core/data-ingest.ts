@@ -1,4 +1,4 @@
-import { SpectroFrame, SpectroMeta, SpectrogramStats } from '../index';
+import { SpectroFrame, SpectroMeta } from '../index';
 import { Controller } from './controller';
 import { CoreBuffer, FrameBins } from './core-buffer';
 
@@ -50,7 +50,7 @@ export class DataIngest {
     this.lastFrameIndex = this.lastFrameIndex.map(() => -1);
   }
 
-  getStats(): SpectrogramStats {
+  getStats(): { frameCount: number } {
     const frameCount = this.buffers.reduce((sum, b) => sum + b.length, 0);
     return { frameCount };
   }

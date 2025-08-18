@@ -1,6 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import { DataIngest, Controller } from '../src/core';
-import { SpectroMeta, DEFAULT_SPECTRO_META } from '../src/index';
+import { SpectroMeta, DEFAULT_SPECTRO_META } from '../src';
 
 const baseMeta: SpectroMeta = {
   streamId: 's',
@@ -15,7 +14,7 @@ const baseMeta: SpectroMeta = {
 };
 
 describe('DataIngest', () => {
-  it('initializes with default metadata', () => {
+  test('initializes with default metadata', () => {
     const controller = new Controller();
     const ingest = new DataIngest(controller);
     ingest.pushFrame({
@@ -27,7 +26,7 @@ describe('DataIngest', () => {
     expect(ingest.getStats()).toEqual({ frameCount: 1 });
   });
 
-  it('accepts frames, enforces ordering, and reallocates on meta change', () => {
+  test('enforces ordering and reallocates on meta change', () => {
     const controller = new Controller({ timeWindowSec: 1 });
     const ingest = new DataIngest(controller);
     ingest.setMeta(baseMeta);
@@ -53,7 +52,7 @@ describe('DataIngest', () => {
       timestampUs: 0,
       bins: new Float32Array([4, 5]),
     });
-    // channel 1
+    // channel 1 frames
     ingest.pushFrames([
       {
         channelId: 1,
@@ -73,11 +72,9 @@ describe('DataIngest', () => {
     expect(ingest.getChannelRows(0).length).toBe(1);
     expect(ingest.getChannelRows(1).length).toBe(2);
 
-    // clear and push again
     ingest.clear();
     expect(ingest.getStats()).toEqual({ frameCount: 0 });
 
-    // change meta reducing channels -> buffers reallocated
     ingest.setMeta({ ...baseMeta, channels: 1 });
     ingest.pushFrame({
       channelId: 0,
