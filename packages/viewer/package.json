@@ -11,7 +11,7 @@
   "type": "module",
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts",
-    "test": "vitest run --coverage",
+    "test": "vitest run --coverage --environment jsdom",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier . --write"
   },
@@ -26,6 +26,12 @@
     "tsup": "^7.1.0",
     "typescript": "^5.2.0",
     "vitest": "^0.34.0",
-    "@vitest/coverage-v8": "^0.34.0"
+    "@vitest/coverage-v8": "^0.34.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@testing-library/react": "^14.0.0",
+    "jsdom": "^22.1.0"
   }
 }
