@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DataIngest, Controller } from '../src/core';
-import { SpectroMeta } from '../src/index';
+import { SpectroMeta, DEFAULT_SPECTRO_META } from '../src/index';
 
 const baseMeta: SpectroMeta = {
   streamId: 's',
@@ -15,6 +15,18 @@ const baseMeta: SpectroMeta = {
 };
 
 describe('DataIngest', () => {
+  it('initializes with default metadata', () => {
+    const controller = new Controller();
+    const ingest = new DataIngest(controller);
+    ingest.pushFrame({
+      channelId: 0,
+      frameIndex: 0,
+      timestampUs: 0,
+      bins: new Float32Array(DEFAULT_SPECTRO_META.binCount),
+    });
+    expect(ingest.getStats()).toEqual({ frameCount: 1 });
+  });
+
   it('accepts frames, enforces ordering, and reallocates on meta change', () => {
     const controller = new Controller({ timeWindowSec: 1 });
     const ingest = new DataIngest(controller);

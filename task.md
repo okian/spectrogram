@@ -60,10 +60,10 @@
 
 ## 6. Default Behavior and Configuration
 
-- [ ] Set defaults: `nfft=2048`, `hopSize=512`, Hann window, time window of 15 seconds, `dBFS` range `[-100, 0]`.
-- [ ] Provide sensible defaults for `freqScale` (`log` for music, `linear` for engineering).
-- [ ] Default palette to `viridis` with option to switch to high-contrast `turbo`.
-- [ ] Ensure default time window and frame rate accommodate real-time streaming.
+- [x] Set defaults: `nfft=2048`, `hopSize=512`, Hann window, time window of 15 seconds, `dBFS` range `[-100, 0]`.
+- [x] Provide sensible defaults for `freqScale` (`log` for music, `linear` for engineering).
+- [x] Default palette to `viridis` with option to switch to high-contrast `turbo`.
+- [x] Ensure default time window and frame rate accommodate real-time streaming.
 
 ## 7. Edge Cases and Hardening
 
