@@ -51,7 +51,7 @@
 
 ## 5. Palette Management and UI Components
 
-- [ ] Load default colormaps (`viridis`, `magma`, `inferno`, `plasma`, `cividis`, `coolwarm`, `twilight`, `turbo`).
+- [x] Load default colormaps (`viridis`, `magma`, `inferno`, `plasma`, `cividis`, `coolwarm`, `twilight`, `turbo`).
 - [ ] Allow custom LUTs to be supplied at runtime and validate length between 256–1024.
 - [ ] Create legend component displaying color scale and dB values.
 - [ ] Create grid overlay with configurable ticks and frequency labels.
