@@ -1,19 +1,21 @@
 # Development Task Plan
 
 ## 1. Package Scope and Setup
-- [ ] Decide final package name (placeholder `@spectro/viewer`).
-- [ ] Configure build system with tsup or Rollup to emit ESM, CJS, and type declarations.
-- [ ] Define module entry points for `module`, `main`, and `types` in package.json.
-- [ ] Declare peer dependencies: `react`, `react-dom`, `three`, and `@react-three/fiber`.
-- [ ] Add optional dependencies: `@react-three/drei` for `OrbitControls` and `zod` for runtime validation.
-- [ ] Establish minimum runtime requirement documentation for WebGL2 capable browsers.
-- [ ] Initialize monorepo structure under `packages/` with `viewer` and example projects.
-- [ ] Set up semantic-release with conventional commit conventions.
-- [ ] Configure ESLint and Prettier according to project style guidelines.
+
+- [x] Decide final package name (placeholder `@spectro/viewer`).
+- [x] Configure build system with tsup or Rollup to emit ESM, CJS, and type declarations.
+- [x] Define module entry points for `module`, `main`, and `types` in package.json.
+- [x] Declare peer dependencies: `react`, `react-dom`, `three`, and `@react-three/fiber`.
+- [x] Add optional dependencies: `@react-three/drei` for `OrbitControls` and `zod` for runtime validation.
+- [x] Establish minimum runtime requirement documentation for WebGL2 capable browsers.
+- [x] Initialize monorepo structure under `packages/` with `viewer` and example projects.
+- [x] Set up semantic-release with conventional commit conventions.
+- [x] Configure ESLint and Prettier according to project style guidelines.
 - [ ] Create Storybook for interactive component demonstration and testing.
 - [ ] Prepare demo project that feeds deterministic frames for Playwright tests.
 
 ## 2. Public API Types
+
 - [ ] Implement `ViewMode` union type including `'2d-heatmap'`, `'2d-waterfall'`, `'3d-waterfall'`, `'polar'`, `'bars'`, `'ridge'`, `'waveform'`, `'mel'`, and `'chroma'`.
 - [ ] Implement `Scale` type supporting `'dbfs'` and `'linear'` scales.
 - [ ] Implement `FreqScale` type supporting `'linear'`, `'log'`, and `'mel'` frequency mappings.
@@ -26,6 +28,7 @@
 - [ ] Define `SpectrogramProps` React props including callbacks for ready, hover, and click events.
 
 ## 3. Core Data Pipeline
+
 - [ ] Implement `DataIngest` module to accept frames and metadata updates.
 - [ ] Implement `CoreBuffer` to maintain rolling time window of FFT rows per channel.
 - [ ] Implement `Controller` to handle configuration changes and derive rendering parameters.
@@ -34,6 +37,7 @@
 - [ ] Support multi-channel streams with per-channel panes or tabs.
 
 ## 4. Rendering Modes
+
 - [ ] Implement base renderer interface for pluggable view modes.
 - [ ] Build 2D heatmap renderer using WebGL2 textures and palettes.
 - [ ] Build 2D waterfall renderer stacking time slices vertically.
@@ -46,6 +50,7 @@
 - [ ] Provide theme support for light and dark modes.
 
 ## 5. Palette Management and UI Components
+
 - [ ] Load default colormaps (`viridis`, `magma`, `inferno`, `plasma`, `cividis`, `coolwarm`, `twilight`, `turbo`).
 - [ ] Allow custom LUTs to be supplied at runtime and validate length between 256–1024.
 - [ ] Create legend component displaying color scale and dB values.
@@ -54,12 +59,14 @@
 - [ ] Implement responsive layout respecting explicit width/height or filling parent via `ResizeObserver`.
 
 ## 6. Default Behavior and Configuration
+
 - [ ] Set defaults: `nfft=2048`, `hopSize=512`, Hann window, time window of 15 seconds, `dBFS` range `[-100, 0]`.
 - [ ] Provide sensible defaults for `freqScale` (`log` for music, `linear` for engineering).
 - [ ] Default palette to `viridis` with option to switch to high-contrast `turbo`.
 - [ ] Ensure default time window and frame rate accommodate real-time streaming.
 
 ## 7. Edge Cases and Hardening
+
 - [ ] Handle WebGL context loss by pausing frame ingestion and rebuilding textures/meshes upon restoration.
 - [ ] Simulate context loss in development to verify recovery path.
 - [ ] Detect absence of `OES_texture_float_linear` and fall back to nearest neighbor sampling.
@@ -76,6 +83,7 @@
 - [ ] Document COOP/COEP requirements if `SharedArrayBuffer` is adopted for multithreading.
 
 ## 8. Testing Strategy
+
 - [ ] Configure unit test environment with Node or JSDOM.
 - [ ] Add type-level tests using `tsd` or TypeScript compile-time assertions.
 - [ ] Write reducer and controller tests for configuration transitions and row math.
@@ -91,6 +99,7 @@
 - [ ] Optionally evaluate `headless-gl` for node-based shader tests.
 
 ## 9. Performance Optimization
+
 - [ ] Benchmark desktop performance to achieve heatmap 1025×1400 Float32 rows at ≥60 FPS.
 - [ ] Benchmark 3D waterfall performance targeting 1025×768 rows at ≥45 FPS.
 - [ ] Benchmark mobile performance with UNORM8 heatmap 1025×512 at ≥45 FPS.
@@ -98,6 +107,7 @@
 - [ ] Clamp device pixel ratio and monitor FPS to adapt rendering workload.
 
 ## 10. Documentation and Examples
+
 - [ ] Draft README covering install instructions and quick start snippet.
 - [ ] Document all props, events, and `SpectrogramAPI` methods.
 - [ ] Describe expected data format (SPF1 v1) with `Float32Array` and `Uint8Array` examples.
@@ -107,9 +117,9 @@
 - [ ] Add screenshots or GIFs demonstrating view modes and palettes.
 
 ## 11. Release and Maintenance
+
 - [ ] Set up CI pipeline executing tests, visual regression, and linting on pull requests.
 - [ ] Configure automatic changelog generation and versioning through semantic-release.
 - [ ] Publish initial release to NPM with ESM, CJS, and type bundles.
 - [ ] Maintain contributor guidelines and code of conduct.
 - [ ] Plan roadmap for additional view modes and performance improvements.
-
