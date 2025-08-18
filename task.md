@@ -16,16 +16,16 @@
 
 ## 2. Public API Types
 
-- [ ] Implement `ViewMode` union type including `'2d-heatmap'`, `'2d-waterfall'`, `'3d-waterfall'`, `'polar'`, `'bars'`, `'ridge'`, `'waveform'`, `'mel'`, and `'chroma'`.
-- [ ] Implement `Scale` type supporting `'dbfs'` and `'linear'` scales.
-- [ ] Implement `FreqScale` type supporting `'linear'`, `'log'`, and `'mel'` frequency mappings.
-- [ ] Implement `PaletteName` type with available colormaps (`viridis`, `magma`, `inferno`, `plasma`, `cividis`, `coolwarm`, `twilight`, `turbo`).
-- [ ] Design `Palette` interface allowing custom LUTs via `Uint8Array` or numeric arrays.
-- [ ] Define `SpectroMeta` interface for stream metadata including window type and frequency step.
-- [ ] Define `SpectroFrame` interface describing incoming FFT frames with timestamp and bin data.
-- [ ] Define `SpectroConfig` interface covering view mode, dimensions, time window, frequency scaling, palette options, and UI toggles.
-- [ ] Define `SpectrogramAPI` interface with configuration setters, frame ingestion, clearing, resizing, PNG export, and stats retrieval.
-- [ ] Define `SpectrogramProps` React props including callbacks for ready, hover, and click events.
+- [x] Implement `ViewMode` union type including `'2d-heatmap'`, `'2d-waterfall'`, `'3d-waterfall'`, `'polar'`, `'bars'`, `'ridge'`, `'waveform'`, `'mel'`, and `'chroma'`.
+- [x] Implement `Scale` type supporting `'dbfs'` and `'linear'` scales.
+- [x] Implement `FreqScale` type supporting `'linear'`, `'log'`, and `'mel'` frequency mappings.
+- [x] Implement `PaletteName` type with available colormaps (`viridis`, `magma`, `inferno`, `plasma`, `cividis`, `coolwarm`, `twilight`, `turbo`).
+- [x] Design `Palette` interface allowing custom LUTs via `Uint8Array` or numeric arrays.
+- [x] Define `SpectroMeta` interface for stream metadata including window type and frequency step.
+- [x] Define `SpectroFrame` interface describing incoming FFT frames with timestamp and bin data.
+- [x] Define `SpectroConfig` interface covering view mode, dimensions, time window, frequency scaling, palette options, and UI toggles.
+- [x] Define `SpectrogramAPI` interface with configuration setters, frame ingestion, clearing, resizing, PNG export, and stats retrieval.
+- [x] Define `SpectrogramProps` React props including callbacks for ready, hover, and click events.
 
 ## 3. Core Data Pipeline
 
