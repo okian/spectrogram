@@ -5,7 +5,7 @@ import React, {
   useImperativeHandle,
   useRef,
   useState,
-} from "react";
+} from 'react';
 
 /** Stream metadata describing the incoming audio data. */
 
@@ -76,11 +76,11 @@ export interface SpectroMeta {
   /** Frequency step between bins, in hertz. */
   freqStepHz: number;
   /** Amplitude scale of the data. */
-  scale: "dbfs" | "linear";
+  scale: 'dbfs' | 'linear';
   /** Optional frequency scale. Defaults to 'linear'. */
-  freqScale?: "linear" | "log" | "mel";
+  freqScale?: 'linear' | 'log' | 'mel';
   /** Optional window function. */
-  window?: "hann" | "hamming" | "blackman" | "kaiser" | "other";
+  window?: 'hann' | 'hamming' | 'blackman' | 'kaiser' | 'other';
 }
 
 /** A single time slice of spectral data. */
@@ -124,15 +124,15 @@ export interface SpectroFrame {
 export interface SpectroConfig {
   /** Rendering mode. */
   view?:
-    | "2d-heatmap"
-    | "2d-waterfall"
-    | "3d-waterfall"
-    | "polar"
-    | "bars"
-    | "ridge"
-    | "waveform"
-    | "mel"
-    | "chroma";
+    | '2d-heatmap'
+    | '2d-waterfall'
+    | '3d-waterfall'
+    | 'polar'
+    | 'bars'
+    | 'ridge'
+    | 'waveform'
+    | 'mel'
+    | 'chroma';
   /** Width of the canvas in pixels; fills parent if omitted. */
   width?: number;
   /** Height of the canvas in pixels; defaults to 300. */
@@ -140,21 +140,21 @@ export interface SpectroConfig {
   /** Visible time window in seconds. */
   timeWindowSec?: number;
   /** Frequency scale for rendering. */
-  freqScale?: "linear" | "log" | "mel";
+  freqScale?: 'linear' | 'log' | 'mel';
   /** Minimum decibel value. */
   dbFloor?: number;
   /** Maximum decibel value. */
   dbCeiling?: number;
   /** Color palette to use. */
   palette?:
-    | "viridis"
-    | "magma"
-    | "inferno"
-    | "plasma"
-    | "cividis"
-    | "coolwarm"
-    | "twilight"
-    | "turbo"
+    | 'viridis'
+    | 'magma'
+    | 'inferno'
+    | 'plasma'
+    | 'cividis'
+    | 'coolwarm'
+    | 'twilight'
+    | 'turbo'
     | { name: string; lut: Uint8Array | number[] };
   /** Reverse the selected palette. */
   paletteReverse?: boolean;
@@ -173,6 +173,9 @@ export interface SpectroConfig {
   /** Enable orbit controls for navigation. */
   orbitControls?: boolean;
   /** Maximum number of rows stored on the GPU. */
+  maxRows?: number;
+}
+
 /** Default metadata values when none are supplied. */
 export const DEFAULT_SPECTRO_META: SpectroMeta = {
   streamId: 'default',
@@ -237,9 +240,9 @@ export interface SpectroConfig {
   /** Frequency downsampling factor. */
   downsampleFreq?: number;
   /** Band configuration for bar view. */
-  barBands?: "octave" | "third" | "mel" | number;
+  barBands?: 'octave' | 'third' | 'mel' | number;
   /** Theme of the viewer. */
-  theme?: "light" | "dark";
+  theme?: 'light' | 'dark';
 }
 
 /** Public methods exposed via ref. */
@@ -257,7 +260,7 @@ export interface SpectrogramAPI {
   /** Placeholder resize hook. */
   resize(): void;
   /** Export the current view as a PNG blob. */
-  exportPNG(opts?: { view?: SpectroConfig["view"] }): Promise<Blob>;
+  exportPNG(opts?: { view?: SpectroConfig['view'] }): Promise<Blob>;
   /** Retrieve simple runtime statistics. */
   stats(): { fps: number; dropped: number; rows: number; bins: number };
 }
@@ -339,16 +342,11 @@ export const Spectrogram = forwardRef<SpectrogramAPI, SpectrogramProps>(
       }
     }, [onReady]);
 
-    return React.createElement("div", { className, style });
+    return React.createElement('div', { className, style });
   },
 );
 
 export default Spectrogram;
-  /** Bands for bar visualisations. */
-  barBands?: 'octave' | 'third' | 'mel' | number;
-  /** Theme selection. */
-  theme?: 'light' | 'dark';
-}
 
 /** Public methods exposed by the spectrogram component. */
 export interface SpectrogramAPI {
