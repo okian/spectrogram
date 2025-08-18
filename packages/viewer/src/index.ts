@@ -2,6 +2,7 @@ import React from 'react';
 import { DataIngest, Controller } from './core';
 export * from './renderers';
 export * from './palettes';
+export * from './demoData';
 
 /** Return the version string of the viewer package. */
 export function viewerVersion(): string {

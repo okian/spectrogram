@@ -11,8 +11,8 @@
 - [x] Initialize monorepo structure under `packages/` with `viewer` and example projects.
 - [x] Set up semantic-release with conventional commit conventions.
 - [x] Configure ESLint and Prettier according to project style guidelines.
-- [ ] Create Storybook for interactive component demonstration and testing.
-- [ ] Prepare demo project that feeds deterministic frames for Playwright tests.
+- [x] Create Storybook for interactive component demonstration and testing.
+- [x] Prepare demo project that feeds deterministic frames for Playwright tests.
 
 ## 2. Public API Types
 

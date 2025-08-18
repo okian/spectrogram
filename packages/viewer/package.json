@@ -14,7 +14,8 @@
     "test": "vitest run --coverage",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier . --write",
-    "release": "semantic-release"
+    "release": "semantic-release",
+    "storybook": "storybook dev -p 6006"
   },
   "peerDependencies": {
     "react": "^18.2.0",
@@ -47,6 +48,9 @@
     "tsup": "^7.1.0",
     "typescript": "^5.2.0",
     "vitest": "^0.34.0",
-    "@vitest/coverage-v8": "^0.34.0"
+    "@vitest/coverage-v8": "^0.34.0",
+    "@storybook/react-vite": "^7.5.0",
+    "@storybook/addon-essentials": "^7.5.0",
+    "storybook": "^7.5.0"
   }
 }
