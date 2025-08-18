@@ -1,0 +1,7 @@
+{
+  "extends": "../viewer/tsconfig.json",
+  "include": ["src"],
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  }
+}
