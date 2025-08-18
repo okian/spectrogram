@@ -1,0 +1,5 @@
+packages:
+  - web/apps/*
+  - web/packages/*
+  - web/crates/*
+

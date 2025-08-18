@@ -1,0 +1,29 @@
+{
+  "name": "spectrogram-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "build": "pnpm -r --filter ./web/packages/* run build",
+    "build:wasm": "pnpm --filter @spectro/wasm-bindings build",
+    "build:viewer": "pnpm --filter @spectro/viewer build",
+    "dev:playground": "pnpm --filter @spectro/playground dev",
+    "dev:shell": "pnpm --filter @spectro/shell dev",
+    "test": "pnpm -r --filter ./web/packages/* run test",
+    "test:unit": "pnpm -r --filter ./web/packages/* run test:unit",
+    "test:e2e": "pnpm -r --filter ./web/apps/* run test:e2e",
+    "test:visual": "pnpm -r --filter ./web/apps/* run test:visual",
+    "lint": "pnpm -r --filter ./web/packages/* run lint",
+    "format": "pnpm -r --filter ./web/packages/* run format",
+    "typecheck": "pnpm -r --filter ./web/packages/* run typecheck",
+    "clean": "rm -rf web/packages/*/dist web/apps/*/dist web/crates/*/target web/crates/*/pkg node_modules/.vite",
+    "clean:wasm": "rm -rf web/crates/*/target web/crates/*/pkg",
+    "setup": "pnpm install && rustup target add wasm32-unknown-unknown && pnpm build:wasm",
+    "quick": "pnpm install && pnpm build:wasm && pnpm dev:playground",
+    "status": "echo 'Project Status:' && node --version && pnpm --version && rustc --version && echo 'WASM target:' && rustup target list | grep wasm32-unknown-unknown | grep installed || echo 'Not installed'",
+    "ports": "echo 'Checking ports...' && lsof -ti:5175 2>/dev/null && echo 'Port 5175 in use' || echo 'Port 5175 available' && lsof -ti:5176 2>/dev/null && echo 'Port 5176 in use' || echo 'Port 5176 available'",
+    "restart": "pkill -f 'vite.*playground' || true && pnpm dev:playground",
+    "deploy": "pnpm build",
+    "deploy:playground": "cd web/apps/playground && pnpm build"
+  }
+}
+

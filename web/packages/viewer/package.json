@@ -1,0 +1,33 @@
+{
+  "name": "@spectro/viewer",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "peerDependencies": {
+    "react": "^18",
+    "react-dom": "^18",
+    "three": "^0.160.0",
+    "@react-three/fiber": "^8.15.0"
+  },
+  "dependencies": {
+    "zustand": "^4.5.0",
+    "three": "^0.160.0",
+    "@react-three/fiber": "^8.15.0",
+    "@spectro/wasm-bindings": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.1",
+    "typescript": "^5.5.0",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/three": "^0.160.0"
+  },
+  "scripts": {
+    "build": "tsup src/index.tsx --format esm,cjs --dts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}
+

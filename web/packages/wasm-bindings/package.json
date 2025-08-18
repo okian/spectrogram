@@ -1,0 +1,19 @@
+{
+  "name": "@spectro/wasm-bindings",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm run build:wasm && tsup",
+    "build:wasm": "wasm-pack build ../../crates/dsp_core --out-dir pkg --target web --release",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.1",
+    "typescript": "^5.5.0"
+  }
+}
+
