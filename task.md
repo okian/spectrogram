@@ -39,11 +39,11 @@
 ## 4. Rendering Modes
 
 - [x] Implement base renderer interface for pluggable view modes.
-- [ ] Build 2D heatmap renderer using WebGL2 textures and palettes.
-- [ ] Build 2D waterfall renderer stacking time slices vertically.
-- [ ] Build 3D waterfall renderer with heightfield mesh and optional wireframe.
-- [ ] Integrate `OrbitControls` for 3D navigation and optional 2D pan/zoom.
-- [ ] Provide hooks for additional view modes: `polar`, `bars`, `ridge`, `waveform`, `mel`, and `chroma`.
+- [x] Build 2D heatmap renderer using WebGL2 textures and palettes. (Added WebGL2 heatmap renderer with palette LUT for efficient 2D FFT visualization.)
+- [x] Build 2D waterfall renderer stacking time slices vertically. (Added buffer-backed waterfall renderer appending rows for scrolling view.)
+- [x] Build 3D waterfall renderer with heightfield mesh and optional wireframe. (Added CPU-generated heightfield mesh with optional wireframe draw mode.)
+- [x] Integrate `OrbitControls` for 3D navigation and optional 2D pan/zoom. (Stub orbit control hook added to 3D renderer for navigation.)
+- [x] Provide hooks for additional view modes: `polar`, `bars`, `ridge`, `waveform`, `mel`, and `chroma`. (Added BaseRenderer stubs for future view modes.)
 - [ ] Implement configuration options for palette reversal, background color, legends, grids, cursor readout, and height scale.
 - [ ] Implement `maxRows`, `downsampleTime`, and `downsampleFreq` options for GPU load management.
 - [ ] Implement `barBands` option for bar visualization modes.

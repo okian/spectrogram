@@ -29,8 +29,9 @@ export abstract class BaseRenderer implements Renderer {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  render(): void {}
+  render(): void {
+    /* no-op */
+  }
 
   dispose(): void {
     this.gl = null;
