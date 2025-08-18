@@ -29,12 +29,12 @@
 
 ## 3. Core Data Pipeline
 
-- [ ] Implement `DataIngest` module to accept frames and metadata updates.
-- [ ] Implement `CoreBuffer` to maintain rolling time window of FFT rows per channel.
-- [ ] Implement `Controller` to handle configuration changes and derive rendering parameters.
-- [ ] Ensure `frameIndex` enforces ordering and gracefully drops out-of-order or duplicate frames.
-- [ ] Flush and reallocate buffers when stream metadata changes (`nfft`, `binCount`, channels).
-- [ ] Support multi-channel streams with per-channel panes or tabs.
+- [x] Implement `DataIngest` module to accept frames and metadata updates.
+- [x] Implement `CoreBuffer` to maintain rolling time window of FFT rows per channel.
+- [x] Implement `Controller` to handle configuration changes and derive rendering parameters.
+- [x] Ensure `frameIndex` enforces ordering and gracefully drops out-of-order or duplicate frames.
+- [x] Flush and reallocate buffers when stream metadata changes (`nfft`, `binCount`, channels).
+- [x] Support multi-channel streams with per-channel panes or tabs.
 
 ## 4. Rendering Modes
 
