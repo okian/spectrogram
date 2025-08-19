@@ -85,4 +85,14 @@ describe('DataIngest', () => {
     expect(ingest.getChannelRows(0).length).toBe(1);
     expect(ingest.getStats()).toEqual({ frameCount: 1 });
   });
+
+  test('computes FFT via wasm from PCM input', () => {
+    const controller = new Controller();
+    const ingest = new DataIngest(controller);
+    const samples = new Float32Array([1, 0, -1, 0]);
+    ingest.pushPCM(0, 0, samples);
+    const rows = ingest.getChannelRows(0);
+    expect(rows.length).toBe(1);
+    expect(Array.from(rows[0])).toEqual([0, 2, 0, 2]);
+  });
 });

@@ -1,6 +1,7 @@
 import { SpectroFrame, SpectroMeta } from '../index';
 import { Controller } from './controller';
 import { CoreBuffer, FrameBins } from './core-buffer';
+import { fftWasm } from './wasm-fft';
 
 /**
  * Accepts frames and metadata updates, maintaining per-channel buffers.
@@ -43,6 +44,16 @@ export class DataIngest {
 
   pushFrames(frames: SpectroFrame[]): void {
     for (const f of frames) this.pushFrame(f);
+  }
+
+  pushPCM(channelId: number, frameIndex: number, pcm: Float32Array): void {
+    const bins = fftWasm(pcm);
+    this.pushFrame({
+      channelId,
+      frameIndex,
+      timestampUs: 0,
+      bins,
+    });
   }
 
   clear(): void {

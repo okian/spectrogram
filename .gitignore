@@ -1,8 +1,10 @@
 node_modules/
 dist/
 coverage/
+target/
 *.tmp
 *.log
 .DS_Store
 .vscode/
 .idea/
+packages/dsp/pkg/dsp_bg.wasm
