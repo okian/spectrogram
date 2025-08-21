@@ -38,6 +38,28 @@ vi.mock('./utils/data-generator', () => ({
   DEFAULT_CONFIG: { sampleRate: 48000 }
 }));
 
+// Mock data generation utilities to keep tests fast and deterministic
+const { mockGenerateMusicSignal, mockGenerateSTFTFrames } = vi.hoisted(() => ({
+  /** Generates a trivial music signal. */
+  mockGenerateMusicSignal: vi.fn(() => new Float32Array(1)),
+  /** Produces a single fake STFT frame. */
+  mockGenerateSTFTFrames: vi.fn(async () => [{ bins: new Float32Array(1), timestamp: 0 }])
+}));
+vi.mock('./utils/data-generator', () => ({
+  /** Returns one precomputed frame to simulate realistic data. */
+  generateRealisticSpectrogramData: vi.fn(async () => [{ bins: new Float32Array(1), timestamp: 0 }]),
+  /** Stub for typed signal generation. */
+  generateSignalByType: vi.fn(() => new Float32Array(1)),
+  /** Expose music signal mock. */
+  generateMusicSignal: mockGenerateMusicSignal,
+  /** Stub for mixed signal generation. */
+  generateMixedSignal: vi.fn(() => new Float32Array(1)),
+  /** Expose STFT frame mock. */
+  generateSTFTFrames: mockGenerateSTFTFrames,
+  /** Minimal DEFAULT_CONFIG consumed by generateData. */
+  DEFAULT_CONFIG: { sampleRate: 48000 }
+}));
+
 // Polyfill ResizeObserver for @react-three/fiber
 class ResizeObserverMock {
   observe() {}

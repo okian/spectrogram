@@ -438,6 +438,9 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     generateData: async (type, opts = {}) => {
       if (!ringBufferRef.current) return;
 
+      const dataType = type || configRef.current.dataType || 'realistic';
+      const duration = configRef.current.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
+      
       // Validate callback and logger inputs to fail fast on misuse
       if (opts.onProgress && typeof opts.onProgress !== 'function') {
         throw new Error('onProgress must be a function');
@@ -521,6 +524,9 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
 
         // Notify consumers of successful generation without noisy logs
         onDataGeneratedRef.current?.({ frameCount: frames.length, type: dataType });
+      } catch (error) {
+        // Surface errors through callback for controlled handling
+        onErrorRef.current?.(error);
       } catch (error) {
         // Surface errors through callback for controlled handling
         onErrorRef.current?.(error);
