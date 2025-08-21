@@ -207,6 +207,13 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
     }
   });
 
+  /**
+   * Cached ring buffer statistics for this render.
+   * What: Avoids redundant {@link SpectroRingBuffer.getStats} calls.
+   * Why: Ensures GridOverlay receives consistent bin and row counts.
+   */
+  const stats = ringBuffer.getStats();
+
   return (
     <>
       {/* Background */}
@@ -233,12 +240,12 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
           transparent={true}
         />
       </mesh>
-      
+
       {/* Grid overlay */}
       {showGrid && (
         <GridOverlay
-          binCount={ringBuffer.getStats().binCount}
-          maxRows={ringBuffer.getStats().maxRows}
+          binCount={stats.binCount}
+          maxRows={stats.maxRows}
         />
       )}
     </>
