@@ -8,16 +8,20 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "pnpm run build:wasm && tsup",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "pnpm build:wasm && c8 -r text tsx test/wasm-bindings.test.ts",
     "build:wasm": "wasm-pack build ../../crates/dsp_core --out-dir pkg --target web --release",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "echo 'no tests configured'",
     "test:unit": "echo 'no unit tests configured'",
     "lint": "echo 'no lint configured'",
     "format": "echo 'no format configured'"
   },
   "devDependencies": {
     "tsup": "^8.0.1",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.7.1",
+    "c8": "^9.1.0"
   }
 }
 
