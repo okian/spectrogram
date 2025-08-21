@@ -153,3 +153,57 @@ test('WASM bindings execute and validate inputs', async () => {
   await assert.rejects(() => stftFrame(new Float32Array([1]), 'hann', 0));
   await assert.rejects(() => magnitudeDbfs(new Float32Array([1]), -1));
 });
+
+/**
+ * Ensure wrappers expose raw WASM memory and support reusable output buffers.
+ */
+test('DSP routines support optional output buffers', async () => {
+  // --- fftReal ---
+  const input = makeInput();
+  const first = await fftReal(input);
+  const expectedFft = first.slice();
+  const fftOut = new Float32Array(first.length);
+  const fftWithOut = await fftReal(input, fftOut);
+  assert.strictEqual(fftWithOut, fftOut);
+  assert.deepEqual(fftOut, expectedFft);
+  await assert.rejects(() => fftReal(input, new Float32Array(fftOut.length + 1)));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await assert.rejects(() => fftReal(input, {} as any));
+
+  // --- applyWindow ---
+  const winFirst = await applyWindow(input, 'hann');
+  const expectedWin = winFirst.slice();
+  const winOut = new Float32Array(winFirst.length);
+  const winWithOut = await applyWindow(input, 'hann', winOut);
+  assert.strictEqual(winWithOut, winOut);
+  assert.deepEqual(winOut, expectedWin);
+  await assert.rejects(() => applyWindow(input, 'hann', new Float32Array(winOut.length + 1)));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await assert.rejects(() => applyWindow(input, 'hann', {} as any));
+
+  // --- stftFrame ---
+  const stftFirst = await stftFrame(input, 'hann');
+  const expectedStft = stftFirst.slice();
+  const stftOut = new Float32Array(stftFirst.length);
+  const stftWithOut = await stftFrame(input, 'hann', undefined, stftOut);
+  assert.strictEqual(stftWithOut, stftOut);
+  assert.deepEqual(stftOut, expectedStft);
+  await assert.rejects(() =>
+    stftFrame(input, 'hann', 1.0, new Float32Array(stftOut.length + 1)),
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await assert.rejects(() => stftFrame(input, 'hann', 1.0, {} as any));
+
+  // --- magnitudeDbfs ---
+  const magFirst = await magnitudeDbfs(input);
+  const expectedMag = magFirst.slice();
+  const magOut = new Float32Array(magFirst.length);
+  const magWithOut = await magnitudeDbfs(input, undefined, magOut);
+  assert.strictEqual(magWithOut, magOut);
+  assert.deepEqual(magOut, expectedMag);
+  await assert.rejects(() =>
+    magnitudeDbfs(input, 1.0, new Float32Array(magOut.length + 1)),
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await assert.rejects(() => magnitudeDbfs(input, 1.0, {} as any));
+});
