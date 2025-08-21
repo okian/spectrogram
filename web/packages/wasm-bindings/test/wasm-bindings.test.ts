@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, rename } from 'node:fs/promises';
+import { readFile, rename, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import {
@@ -22,6 +22,11 @@ const WASM_CONTENT_TYPE = 'application/wasm';
  * How: short alternating values exercise positive/negative paths.
  */
 const TEST_SIGNAL_VALUES = [1, -1, 0.5, -0.5] as const;
+
+/** Relative path from this test file to the wasm-pack output directory.
+ * Why: ensures generated artifacts are present when tests run.
+ */
+const PKG_DIR_RELATIVE = '../pkg';
 
 // Allow wasm-pack's browser loader to fetch local files in Node.
 /** Preserve original fetch implementation for cleanup. */
@@ -74,6 +79,19 @@ test('initWasm throws clear error when WASM bundle is missing', async () => {
   } finally {
     await rename(backupPath, wasmJsPath);
   }
+});
+
+/**
+ * Confirm wasm-pack output exists so consumers aren't missing runtime files.
+ */
+test('pkg directory exists after build step', async () => {
+  /** Absolute path to the wasm-pack output folder under test. */
+  const pkgDir = resolve(dirname(fileURLToPath(import.meta.url)), PKG_DIR_RELATIVE);
+  /** Whether the pkg directory exists on disk. */
+  const pkgPresent = await stat(pkgDir)
+    .then(() => true)
+    .catch(() => false);
+  assert.ok(pkgPresent, 'pkg directory should exist when build:wasm has run');
 });
 
 /**
