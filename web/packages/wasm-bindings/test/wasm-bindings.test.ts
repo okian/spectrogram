@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, rename, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +46,15 @@ const fileFetch: typeof fetch = async (input: any, init?: any): Promise<Response
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ;(globalThis.fetch as any) = fileFetch as any;
 
+/**
+ * Restore the original `fetch` implementation after all tests complete.
+ * Why: prevent cross-test pollution and ensure global state is clean.
+ */
+after(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis.fetch as any) = realFetch as any;
+});
+
 /** Flag indicating whether streaming compilation was exercised. */
 let streamingUsed = false;
 /** Preserve original instantiateStreaming to restore after test. */
@@ -89,8 +98,11 @@ test('initWasm throws clear error when WASM bundle is missing', async () => {
 test('initWasm throws clear error on network failure', async () => {
   // Replace fetch with a stub that simulates a network failure.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  /** Error message emitted when network request simulation fails. */
+  const NETWORK_FAILURE_MESSAGE = 'Failed to fetch';
+  /** Failing stub to simulate a network failure for fetch. */
   const failingFetch: typeof fetch = async (): Promise<Response> => {
-    throw new TypeError('Failed to fetch');
+    throw new TypeError(NETWORK_FAILURE_MESSAGE);
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis.fetch as any) = failingFetch as any;
@@ -101,6 +113,9 @@ test('initWasm throws clear error on network failure', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (globalThis.fetch as any) = fileFetch as any;
   }
+});
+
+/**
  * Confirm wasm-pack output exists so consumers aren't missing runtime files.
  */
 test('pkg directory exists after build step', async () => {
