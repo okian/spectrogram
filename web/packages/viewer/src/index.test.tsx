@@ -1,9 +1,20 @@
 import React from 'react';
 import { render, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { generateRealisticSpectrogramData } from './utils/data-generator';
 
 // Mock WASM bindings to avoid requiring compiled artifacts during tests
 vi.mock('@spectro/wasm-bindings', () => ({}));
+
+// Mock data generation utilities to avoid heavy computations
+vi.mock('./utils/data-generator', () => ({
+  DEFAULT_CONFIG: { sampleRate: 1 },
+  generateRealisticSpectrogramData: vi.fn(),
+  generateSignalByType: vi.fn(),
+  generateMusicSignal: vi.fn(),
+  generateMixedSignal: vi.fn(),
+  generateSTFTFrames: vi.fn(),
+}));
 
 // Polyfill ResizeObserver for @react-three/fiber
 class ResizeObserverMock {
@@ -69,6 +80,13 @@ function hexToRgb(hex: string): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+/**
+ * Fractional value used to trigger integer validation failures.
+ * What: Provides a reusable non-integer for tests.
+ * Why: Ensures metadata validation rejects non-whole numbers.
+ */
+const NON_INTEGER_VALUE = 1.5;
+
 describe('Spectrogram metadata handling', () => {
   it('resizes ring buffer and updates stats on meta change', async () => {
     let api: SpectrogramAPI | null = null;
@@ -109,6 +127,28 @@ describe('Spectrogram metadata handling', () => {
 
     const badMeta = makeMeta({ binCount: 0 });
     expect(() => apiRef.setMeta(badMeta)).toThrow();
+  });
+
+  /**
+   * Validates rejection of non-integer metadata fields.
+   * What: Attempts to set fractional counts for required integer fields.
+   * Why: Prevents allocation errors from fractional buffer sizes.
+   * How: Iterates over each count-based key and expects setMeta to throw.
+   */
+  it('rejects non-integer counts', async () => {
+    let api: SpectrogramAPI | null = null;
+    render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} onReady={a => (api = a)} />);
+    await act(async () => {
+      await new Promise(res => setTimeout(res, 0));
+    });
+    if (!api) throw new Error('API not initialized');
+
+    // Metadata fields that should strictly be integers.
+    const countKeys: Array<keyof SpectroMeta> = ['channels', 'sampleRateHz', 'nfft', 'hopSize', 'binCount'];
+    for (const key of countKeys) {
+      const meta = makeMeta({ [key]: NON_INTEGER_VALUE } as Partial<SpectroMeta>);
+      expect(() => api!.setMeta(meta)).toThrow(/must be an integer/);
+    }
   });
 
   it('rejects frames with mismatched bin counts', async () => {
@@ -167,6 +207,15 @@ it('emits SpectroEvent on click', async () => {
       onClick={handleClick}
     />
   );
+it('invokes progress and logger callbacks on successful generation', async () => {
+  const frames = [
+    { bins: new Float32Array([0]), timestamp: 0 },
+    { bins: new Float32Array([0]), timestamp: 1 }
+  ];
+  vi.mocked(generateRealisticSpectrogramData).mockResolvedValueOnce(frames as any);
+
+  let api: SpectrogramAPI | null = null;
+  render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} onReady={a => (api = a)} />);
   await act(async () => {
     await new Promise(res => setTimeout(res, 0));
   });
@@ -199,4 +248,47 @@ it('emits SpectroEvent on click', async () => {
   const payload = handleClick.mock.calls[0][0];
   expect(payload).toMatchObject({ timeSec: 0, row: 0, bin: 2, freqHz: 2 });
   expect(payload.mag).toBeCloseTo(0.5);
+
+  act(() => api!.setMeta(makeMeta({ binCount: 1 }))); // ensure ring buffer matches frame bins
+
+  const onProgress = vi.fn();
+  const logger = { info: vi.fn(), error: vi.fn() };
+
+  await act(async () => {
+    await api!.generateData('realistic', { onProgress, logger });
+  });
+
+  expect(onProgress).toHaveBeenCalledWith({ frameCount: frames.length, type: 'realistic' });
+  expect(logger.info).toHaveBeenCalledTimes(1);
+  expect(logger.error).not.toHaveBeenCalled();
+});
+
+/**
+ * Ensure errors during generation are surfaced via hooks.
+ * What: Simulates a failing generator to test onError handling.
+ * Why: Consumers must receive explicit failure signals instead of silent console output.
+ */
+it('invokes error callback and logger on failure', async () => {
+  const testError = new Error('boom');
+  vi.mocked(generateRealisticSpectrogramData).mockRejectedValueOnce(testError);
+
+  let api: SpectrogramAPI | null = null;
+  render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} onReady={a => (api = a)} />);
+  await act(async () => {
+    await new Promise(res => setTimeout(res, 0));
+  });
+  if (!api) throw new Error('API not initialized');
+
+  act(() => api!.setMeta(makeMeta({ binCount: 1 }))); // ring buffer compatible
+
+  const onError = vi.fn();
+  const logger = { info: vi.fn(), error: vi.fn() };
+
+  await act(async () => {
+    await api!.generateData('realistic', { onError, logger }).catch(() => {});
+  });
+
+  expect(onError).toHaveBeenCalledWith(testError);
+  expect(logger.error).toHaveBeenCalledWith('Failed to generate data', testError);
+  expect(logger.info).not.toHaveBeenCalled();
 });

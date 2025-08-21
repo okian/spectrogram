@@ -16,6 +16,8 @@ const TEXTURE_TYPE_BY_FORMAT: Record<RingBufferConfig['format'], THREE.TextureDa
 const UINT8_MAX = 255;
 /** Maximum value of an unsigned 16-bit integer for normalization. */
 const UINT16_MAX = 65535;
+/** Minimum permissible value for dimensional parameters to prevent empty buffers. */
+const MIN_DIMENSION = 1;
 
 /** Configuration describing ring buffer behaviour. */
 export interface RingBufferConfig {
@@ -53,7 +55,8 @@ export class SpectroRingBuffer {
   /**
    * Construct a ring buffer bound to a WebGL context.
    * @param gl - Rendering context used for uploads.
-   * @param config - Behavioural configuration.
+   * @param config - Behavioural configuration where {@link RingBufferConfig.binCount} and
+   * {@link RingBufferConfig.maxRows} must be finite positive integers.
    */
   constructor(gl: WebGLRenderingContext, config: RingBufferConfig) {
     this.gl = gl;
@@ -61,6 +64,7 @@ export class SpectroRingBuffer {
     this.verifyFloatTextureSupport();
 
     const { binCount, maxRows } = this.config;
+    this.validateDimensions(binCount, maxRows);
     this.data = this.createDataArray(binCount * maxRows);
     this.scratch = new Float32Array(binCount);
     this.texture = this.createTexture(this.data, binCount, maxRows);
@@ -131,6 +135,21 @@ export class SpectroRingBuffer {
     texture.minFilter = filter;
     texture.needsUpdate = true;
     return texture;
+  }
+
+  /**
+   * Ensure provided dimensions are finite positive integers.
+   * @param binCount - Desired number of frequency bins per row.
+   * @param maxRows - Desired number of rows to allocate.
+   * @throws When either dimension is non-integer, non-finite, or below {@link MIN_DIMENSION}.
+   */
+  private validateDimensions(binCount: number, maxRows: number): void {
+    if (!Number.isFinite(binCount) || !Number.isInteger(binCount) || binCount < MIN_DIMENSION) {
+      throw new Error('binCount must be a finite positive integer.');
+    }
+    if (!Number.isFinite(maxRows) || !Number.isInteger(maxRows) || maxRows < MIN_DIMENSION) {
+      throw new Error('maxRows must be a finite positive integer.');
+    }
   }
 
   /**
@@ -235,13 +254,15 @@ export class SpectroRingBuffer {
 
   /**
    * Resize the buffer, discarding existing data.
-   * @param binCount - New number of frequency bins.
-   * @param maxRows - New maximum number of rows.
+   * @param binCount - New number of frequency bins; must be a finite positive integer.
+   * @param maxRows - New maximum number of rows; must be a finite positive integer.
+   * @throws When either parameter fails validation.
    */
   resize(binCount: number, maxRows: number): void {
     if (binCount === this.config.binCount && maxRows === this.config.maxRows) {
       return;
     }
+    this.validateDimensions(binCount, maxRows);
     this.data = this.createDataArray(binCount * maxRows);
     this.scratch = new Float32Array(binCount);
     this.texture.dispose();

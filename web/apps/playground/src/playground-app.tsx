@@ -3,7 +3,14 @@ import { Spectrogram, type SpectroConfig, type SpectrogramAPI, DEFAULT_BG } from
 import { PaletteDemo } from './palette-demo';
 import { WasmTest } from './wasm-test';
 import type { SignalType } from '@spectro/viewer';
+import { PALETTE_OPTIONS, isPaletteName, DEFAULT_PALETTE } from './palette-utils';
 
+/**
+ * Supported synthetic signal presets.
+ * What: Options exposed to the demo data generator.
+ * Why: Keeps the UI selection synchronized with available signal types.
+ * How: Array of value/label/description tuples typed for safety.
+ */
 const signalTypes: Array<{ value: SignalType | 'mixed' | 'music' | 'realistic'; label: string; description: string }> = [
   { value: 'realistic', label: 'Realistic', description: 'Varied signals: music, speech, noise, chirp, tones' },
   { value: 'music', label: 'Music', description: 'Chord progressions with harmonics' },
@@ -30,7 +37,7 @@ export const PlaygroundApp: React.FC = () => {
       width: 800,
       height: 400,
       timeWindowSec: 10,
-      palette: 'viridis',
+      palette: DEFAULT_PALETTE,
       dbFloor: -100,
       dbCeiling: 0,
       showLegend: true,
@@ -54,14 +61,32 @@ export const PlaygroundApp: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  /**
+   * Capture the viewer API once initialization completes.
+   * What: Stores the {@link SpectrogramAPI} reference for later use.
+   * Why: Other handlers need access to invoke rendering operations.
+   * How: Writes the provided API instance into a mutable ref.
+   */
   const handleReady = (api: SpectrogramAPI) => {
     apiRef.current = api;
   };
 
+  /**
+   * Remove all currently buffered spectrogram frames.
+   * What: Calls {@link SpectrogramAPI.clear}.
+   * Why: Resets the visualization to an empty state for new data.
+   * How: Uses optional chaining to avoid errors before initialization.
+   */
   const handleClearData = () => {
     apiRef.current?.clear();
   };
 
+  /**
+   * Save the current spectrogram view as a PNG image.
+   * What: Leverages {@link SpectrogramAPI.exportPNG} to generate a Blob.
+   * Why: Allows users to download snapshots of the visualization.
+   * How: Creates a temporary anchor element to trigger the download.
+   */
   const handleExportPNG = async () => {
     try {
       const blob = await apiRef.current?.exportPNG();
@@ -78,9 +103,23 @@ export const PlaygroundApp: React.FC = () => {
     }
   };
 
+  /**
+   * Request synthetic data generation from the viewer.
+   * What: Wraps API call to produce demo frames of the given signal type.
+   * Why: Exposes generation to UI controls while handling missing API safely.
+   * How: Defers to {@link SpectrogramAPI.generateData} if the API ref is set.
+   */
   const handleGenerateData = async (type?: SignalType | 'mixed' | 'music' | 'realistic') => {
     await apiRef.current?.generateData(type);
   };
+
+  /**
+   * Handle hover events emitted from the spectrogram.
+   * What: Provides an extension point for future UI interactions.
+   * Why: Keeps the playground silent in production yet ready for instrumentation.
+   * How: Memoized no-op to avoid re-renders and overhead.
+   */
+  const handleHover = React.useCallback((): void => {}, []);
 
   return (
     <div style={{ 
@@ -317,11 +356,18 @@ export const PlaygroundApp: React.FC = () => {
                   Color Palette:
                 </label>
                 <select
-                  value={typeof config.palette === 'string' ? config.palette : 'viridis'}
-                  onChange={(e) => setConfig(prev => ({ 
-                    ...prev, 
-                    palette: e.target.value as any 
-                  }))}
+                  value={typeof config.palette === 'string' ? config.palette : DEFAULT_PALETTE}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (isPaletteName(value)) {
+                      setConfig(prev => ({
+                        ...prev,
+                        palette: value
+                      }));
+                    } else {
+                      console.warn(`Ignoring invalid palette "${value}"`);
+                    }
+                  }}
                   style={{
                     width: '100%',
                     padding: '8px',
@@ -331,14 +377,11 @@ export const PlaygroundApp: React.FC = () => {
                     borderRadius: '4px'
                   }}
                 >
-                  <option value="viridis">Viridis</option>
-                  <option value="magma">Magma</option>
-                  <option value="inferno">Inferno</option>
-                  <option value="plasma">Plasma</option>
-                  <option value="cividis">Cividis</option>
-                  <option value="coolwarm">Coolwarm</option>
-                  <option value="twilight">Twilight</option>
-                  <option value="turbo">Turbo</option>
+                  {PALETTE_OPTIONS.map(p => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -456,9 +499,7 @@ export const PlaygroundApp: React.FC = () => {
             <Spectrogram
               config={config}
               onReady={handleReady}
-              onHover={(data) => {
-                console.log('Hover:', data);
-              }}
+              onHover={handleHover}
               style={{ borderRadius: '8px', overflow: 'hidden' }}
             />
           </div>
