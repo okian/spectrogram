@@ -5,6 +5,7 @@
  */
 
 import { stftFrame } from '@spectro/wasm-bindings';
+import { DEFAULT_GENERATED_FPS } from '../constants';
 
 /** Configuration for generating test signals. */
 export interface SignalConfig {
@@ -380,8 +381,12 @@ export async function generateRealisticSpectrogramData(
     // Generate signal for this segment
     const signal = generateSignalByType(segmentSamples, sampleRate, signalType);
     
-    // Process into STFT frames
-    const frames = await generateSTFTFrames(signal, config, Math.floor(segmentDuration * 10));
+    // Process into STFT frames at DEFAULT_GENERATED_FPS
+    const frames = await generateSTFTFrames(
+      signal,
+      config,
+      Math.floor(segmentDuration * DEFAULT_GENERATED_FPS)
+    );
     
     // Add type information and adjust timestamps
     const timeOffset = segmentIndex * segmentDuration;

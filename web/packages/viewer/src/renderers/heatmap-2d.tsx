@@ -19,6 +19,8 @@ const LUT_HEIGHT = 1;
 const PLANE_SIZE = 2;
 /** Number of grid lines to draw per axis in the overlay. */
 const GRID_LINE_COUNT = 10;
+/** Minimum number of grid lines allowed for valid geometry generation. */
+const GRID_LINE_MIN_COUNT = 2;
 /** Color used for grid overlay lines. */
 const GRID_LINE_COLOR = '#333';
 /** Transparency applied to grid overlay lines. */
@@ -39,8 +41,13 @@ export function generateGridLineVertices(
   min: number = GRID_MIN,
   max: number = GRID_MAX
 ): { horizontal: Float32Array[]; vertical: Float32Array[] } {
-  if (lineCount < 2) {
-    throw new Error(`lineCount must be at least 2; got ${lineCount}`);
+  if (lineCount < GRID_LINE_MIN_COUNT) {
+    throw new Error(
+      `lineCount must be at least ${GRID_LINE_MIN_COUNT}; got ${lineCount}`
+    );
+  }
+  if (max <= min) {
+    throw new Error(`max must be greater than min; got min=${min}, max=${max}`);
   }
   if (max <= min) {
     throw new Error(`max must be greater than min; got min=${min}, max=${max}`);
