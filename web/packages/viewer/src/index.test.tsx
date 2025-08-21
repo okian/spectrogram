@@ -1,10 +1,10 @@
 import React from 'react';
-import { render, act } from '@testing-library/react';
-import { vi } from 'vitest';
+import { render, act, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import { generateRealisticSpectrogramData } from './utils/data-generator';
 
 // Mock WASM bindings to avoid requiring compiled artifacts during tests
-vi.mock('@spectro/wasm-bindings', () => ({}), { virtual: true });
+vi.mock('@spectro/wasm-bindings', () => ({}));
 
 // Mock data generation utilities to avoid heavy computations
 vi.mock('./utils/data-generator', () => ({
@@ -97,22 +97,23 @@ describe('Spectrogram metadata handling', () => {
       await new Promise(res => setTimeout(res, 0));
     });
     if (!api) throw new Error('API not initialized');
+    const apiRef = api;
 
     const meta = makeMeta();
-    act(() => api!.setMeta(meta));
+    act(() => apiRef.setMeta(meta));
 
-    const statsAfterSet = api!.stats();
+    const statsAfterSet = apiRef.stats();
     expect(statsAfterSet.bins).toBe(meta.binCount);
     expect(statsAfterSet.rows).toBe(0);
 
     const frameBins = new Float32Array(meta.binCount);
-    act(() => api!.pushFrame({ channelId: 0, frameIndex: 0, timestampUs: 0, bins: frameBins }));
-    expect(api!.stats().rows).toBe(1);
+    act(() => apiRef.pushFrame({ channelId: 0, frameIndex: 0, timestampUs: 0, bins: frameBins }));
+    expect(apiRef.stats().rows).toBe(1);
 
     const meta2 = makeMeta({ binCount: 128, hopSize: 256 });
-    act(() => api!.setMeta(meta2));
-    expect(api!.stats().bins).toBe(meta2.binCount);
-    expect(api!.stats().rows).toBe(0);
+    act(() => apiRef.setMeta(meta2));
+    expect(apiRef.stats().bins).toBe(meta2.binCount);
+    expect(apiRef.stats().rows).toBe(0);
   });
 
   it('rejects invalid metadata', async () => {
@@ -122,9 +123,10 @@ describe('Spectrogram metadata handling', () => {
       await new Promise(res => setTimeout(res, 0));
     });
     if (!api) throw new Error('API not initialized');
+    const apiRef = api;
 
     const badMeta = makeMeta({ binCount: 0 });
-    expect(() => api!.setMeta(badMeta)).toThrow();
+    expect(() => apiRef.setMeta(badMeta)).toThrow();
   });
 
   /**
@@ -156,12 +158,13 @@ describe('Spectrogram metadata handling', () => {
       await new Promise(res => setTimeout(res, 0));
     });
     if (!api) throw new Error('API not initialized');
+    const apiRef = api;
 
     const meta = makeMeta();
-    act(() => api!.setMeta(meta));
+    act(() => apiRef.setMeta(meta));
 
     const wrongBins = new Float32Array(meta.binCount + 1);
-    expect(() => api!.pushFrame({ channelId: 0, frameIndex: 0, timestampUs: 0, bins: wrongBins })).toThrow();
+    expect(() => apiRef.pushFrame({ channelId: 0, frameIndex: 0, timestampUs: 0, bins: wrongBins })).toThrow();
   });
 
   /**
@@ -192,10 +195,18 @@ it('creates WebGL context only once', async () => {
 });
 
 /**
- * Verify generateData reports progress through callbacks and logger.
- * What: Ensures synthetic generation communicates frame counts.
- * Why: Allows consumers to track work without relying on console output.
+ * Ensure click events provide accurate spectrogram coordinates.
  */
+it('emits SpectroEvent on click', async () => {
+  const handleClick = vi.fn();
+  let api: SpectrogramAPI | null = null;
+  const { container } = render(
+    <Spectrogram
+      config={{ autoGenerate: false, showLegend: false }}
+      onReady={a => (api = a)}
+      onClick={handleClick}
+    />
+  );
 it('invokes progress and logger callbacks on successful generation', async () => {
   const frames = [
     { bins: new Float32Array([0]), timestamp: 0 },
@@ -209,6 +220,34 @@ it('invokes progress and logger callbacks on successful generation', async () =>
     await new Promise(res => setTimeout(res, 0));
   });
   if (!api) throw new Error('API not initialized');
+  const apiRef = api;
+
+  const meta = makeMeta({ binCount: 4, sampleRateHz: 1, hopSize: 1, freqStepHz: 1, scale: 'linear' });
+  act(() => apiRef.setMeta(meta));
+  const frameBins = new Float32Array([0, 0.25, 0.5, 0.75]);
+  act(() => apiRef.pushFrame({ channelId: 0, frameIndex: 0, timestampUs: 0, bins: frameBins }));
+
+  const div = container.firstChild as HTMLElement;
+  vi.spyOn(div, 'getBoundingClientRect').mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 100,
+    height: 100,
+    right: 100,
+    bottom: 100,
+    x: 0,
+    y: 0,
+    toJSON: () => {}
+  } as DOMRect);
+
+  await act(async () => {
+    fireEvent.click(div, { clientX: 50, clientY: 50 });
+  });
+
+  expect(handleClick).toHaveBeenCalledTimes(1);
+  const payload = handleClick.mock.calls[0][0];
+  expect(payload).toMatchObject({ timeSec: 0, row: 0, bin: 2, freqHz: 2 });
+  expect(payload.mag).toBeCloseTo(0.5);
 
   act(() => api!.setMeta(makeMeta({ binCount: 1 }))); // ensure ring buffer matches frame bins
 

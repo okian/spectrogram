@@ -192,6 +192,23 @@ test('pushRow inserts rows sequentially', () => {
 });
 
 /**
+ * Ensure read returns normalised magnitudes at given coordinates.
+ */
+test('read retrieves bin value', () => {
+  const config: RingBufferConfig = {
+    binCount: BIN_COUNT,
+    maxRows: MAX_ROWS,
+    format: 'UNORM8',
+    linearFilter: false,
+  };
+  const buffer = new SpectroRingBuffer(GL_WEBGL1_NO_EXT, config);
+  buffer.pushRow(new Uint8Array([0, 128, 255]));
+  expect(buffer.read(0, 0)).toBe(0);
+  expect(buffer.read(0, 1)).toBeCloseTo(128 / 255);
+  expect(buffer.read(0, 2)).toBe(1);
+});
+
+/**
  * Verify old rows are overwritten when capacity wraps around.
  */
 test('pushRow wraps around after reaching capacity', () => {
