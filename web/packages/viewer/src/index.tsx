@@ -3,7 +3,8 @@ import { Canvas } from '@react-three/fiber';
 import { SpectroRingBuffer } from './core/ring-buffer';
 import { Heatmap2D } from './renderers/heatmap-2d';
 import { Legend } from './ui/legend';
-import { 
+import { DEFAULT_BG } from './constants';
+import {
   generateRealisticSpectrogramData, 
   generateSignalByType, 
   generateMusicSignal,
@@ -19,6 +20,8 @@ export { generateLUT, samplePalette, type Palette, type PaletteName, type RGBA }
 
 // Re-export data generator types
 export { type SignalType } from './utils/data-generator';
+// Re-export shared constants
+export { DEFAULT_BG } from './constants';
 
 /** View modes supported by the spectrogram viewer. */
 export type ViewMode = '2d-heatmap' | '2d-waterfall' | '3d-waterfall' | 'polar' | 'bars' | 'ridge' | 'waveform' | 'mel' | 'chroma';
@@ -174,7 +177,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     dbCeiling: 0,
     showLegend: true,
     showGrid: true,
-    background: '#111',
+    background: DEFAULT_BG,
     dataType: 'realistic',
     dataDuration: DEFAULT_DATA_DURATION_SECONDS,
     autoGenerate: true,
@@ -353,10 +356,10 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     if (onReady) onReady(apiRef.current);
   }, [onReady]);
 
-  const { width = 800, height = 400, background = '#111' } = currentConfig;
+  const { width = 800, height = 400, background = DEFAULT_BG } = currentConfig;
 
   return (
-    <div 
+    <div
       ref={canvasRef}
       className={className} 
       style={{ 

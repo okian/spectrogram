@@ -9,6 +9,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { SpectroRingBuffer } from '../core/ring-buffer';
 import { generateLUT, type Palette } from '../palettes';
+import { DEFAULT_BG } from '../constants';
 
 /** Props for the 2D heatmap renderer. */
 interface Heatmap2DProps {
@@ -24,7 +25,7 @@ interface Heatmap2DProps {
   dbCeiling: number;
   /** Whether to show grid overlay. */
   showGrid?: boolean;
-  /** Background color. */
+  /** Background color; defaults to {@link DEFAULT_BG}. */
   background?: string;
 }
 
@@ -86,7 +87,7 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
   dbFloor,
   dbCeiling,
   showGrid = false,
-  background = '#111'
+  background = DEFAULT_BG
 }) => {
   const { gl } = useThree();
   const meshRef = React.useRef<THREE.Mesh>(null);
