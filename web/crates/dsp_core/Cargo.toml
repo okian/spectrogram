@@ -20,3 +20,10 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 
+[package.metadata.wasm-pack.profile.release]
+# Disable wasm-opt in automated environments where the binary isn't present.
+# What: Skip binaryen's optimization pass during release builds.
+# Why: Ensures `wasm-pack build` succeeds in CI without network downloads.
+# How: `wasm-opt = false` instructs wasm-pack to avoid invoking wasm-opt.
+wasm-opt = false
+
