@@ -36,8 +36,12 @@ const WASM_PKG_JS_PATH = '../pkg/spectro_dsp.js';
 
 /** Error code emitted when a dynamic import cannot resolve a module. */
 const MODULE_NOT_FOUND_CODE = 'ERR_MODULE_NOT_FOUND';
+/** Error code produced when a file-backed fetch cannot locate the resource. */
+const FILE_NOT_FOUND_CODE = 'ENOENT';
 /** Substring present in browser errors when fetching a module fails. */
 const FAILED_TO_FETCH_MSG = 'Failed to fetch';
+/** Substring present in Firefox network failures. */
+const NETWORK_ERROR_MSG = 'NetworkError';
 
 /** Cached WASM module once initialised for reuse across calls. */
 let wasmModule: WasmModule | null = null;
@@ -72,7 +76,10 @@ export async function initWasm(): Promise<WasmModule> {
       const err = error as { code?: string; message?: string };
       if (
         err.code === MODULE_NOT_FOUND_CODE ||
-        (err.message && err.message.includes(FAILED_TO_FETCH_MSG))
+        err.code === FILE_NOT_FOUND_CODE ||
+        (err.message &&
+          (err.message.includes(FAILED_TO_FETCH_MSG) ||
+            err.message.includes(NETWORK_ERROR_MSG)))
       ) {
         throw new Error(`WASM bundle not found at ${WASM_PKG_JS_PATH}`);
       }
