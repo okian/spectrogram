@@ -155,9 +155,39 @@ test('WASM bindings execute and validate inputs', async () => {
 });
 
 /**
- * Ensure wrappers expose raw WASM memory and support reusable output buffers.
+ * Ensure WASM functions do not mutate inputs and returned arrays stay stable
+ * across subsequent calls. Why: the bindings previously copied results via
+ * `.slice()` to guard against aliasing; this test proves direct returns are
+ * safe.
  */
-test('DSP routines support optional output buffers', async () => {
+test('WASM outputs are immutable and inputs remain unchanged', async () => {
+  await initWasm();
+
+  /**
+   * Generic checker to assert that a function neither mutates its input nor
+   * returns a buffer that aliases mutable WASM memory.
+   */
+  async function expectIsolated(
+    fn: (...args: any[]) => Promise<Float32Array>, // eslint-disable-line @typescript-eslint/no-explicit-any
+    args: any[], // eslint-disable-line @typescript-eslint/no-explicit-any
+    altArgs: any[], // eslint-disable-line @typescript-eslint/no-explicit-any
+  ) {
+    const input = args[0] as Float32Array;
+    const inputSnapshot = new Float32Array(input);
+    const out = await fn(...args);
+    const outSnapshot = new Float32Array(out);
+    await fn(...altArgs);
+    assert.deepEqual(out, outSnapshot, 'output should remain unchanged');
+    assert.deepEqual(input, inputSnapshot, 'input should remain unchanged');
+  }
+
+  /** Buffer of zeros used for alternate calls that may overwrite WASM memory. */
+  const zeros = new Float32Array(makeInput().length);
+
+  await expectIsolated(fftReal, [makeInput()], [zeros]);
+  await expectIsolated(applyWindow, [makeInput(), 'hann'], [zeros, 'hann']);
+  await expectIsolated(stftFrame, [makeInput(), 'hann'], [zeros, 'hann']);
+  await expectIsolated(magnitudeDbfs, [makeInput()], [zeros]);
   // --- fftReal ---
   const input = makeInput();
   const first = await fftReal(input);

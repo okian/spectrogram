@@ -47,6 +47,11 @@ const FAILED_TO_FETCH_MSG = 'Failed to fetch';
 /** Substring present in Firefox network failures. */
 const NETWORK_ERROR_MSG = 'NetworkError';
 
+/**
+ * Default reference amplitude used for dBFS calculations.
+ * Why: avoids magic numbers and clearly documents expected reference level.
+ */
+const DEFAULT_REFERENCE_AMPLITUDE = 1.0;
 /** Default reference level used when converting to dBFS. */
 const DEFAULT_REFERENCE_LEVEL = 1.0;
 
@@ -122,18 +127,10 @@ export async function fftReal(
     throw new TypeError('fftReal output buffer must be a Float32Array');
   }
   const wasm = await initWasm();
-  const result = wasm.fft_real(input);
-  if (output) {
-    if (output.length !== result.length) {
-      throw new Error(
-        `fftReal output length ${output.length} does not match ${result.length}`,
-      );
-    }
-    output.set(result);
-    return output;
-  }
-  // The returned array views WASM memory that may be reused; copy or supply `output` to retain data.
-  return result;
+  // WASM exports already allocate new `Float32Array` instances in JS-owned memory.
+  // Returning them directly avoids an unnecessary copy while guaranteeing callers
+  // receive an isolated buffer.
+  return wasm.fft_real(input);
 }
 
 /**
@@ -161,18 +158,10 @@ export async function applyWindow(
   }
   const wasm = await initWasm();
   const resolvedType = windowType === 'none' ? 'rect' : windowType;
-  const result = wasm.apply_window(input, resolvedType);
-  if (output) {
-    if (output.length !== result.length) {
-      throw new Error(
-        `applyWindow output length ${output.length} does not match ${result.length}`,
-      );
-    }
-    output.set(result);
-    return output;
-  }
-  // Returned array aliases WASM memory that may be recycled; provide `output` or copy to keep values.
-  return result;
+  // The underlying Rust function returns a fresh `Vec<f32>` which wasm-bindgen
+  // converts into a standalone `Float32Array`. No additional duplication is
+  // required; exposing the buffer directly prevents wasted allocations.
+  return wasm.apply_window(input, resolvedType);
 }
 
 /**
@@ -184,7 +173,7 @@ export async function applyWindow(
 export async function stftFrame(
   input: Float32Array,
   windowType: 'hann' | 'hamming' | 'blackman' | 'none',
-  reference: number = DEFAULT_REFERENCE_LEVEL,
+  reference = DEFAULT_REFERENCE_AMPLITUDE,
   output?: Float32Array,
 ): Promise<Float32Array> {
   if (!(input instanceof Float32Array)) {
@@ -204,18 +193,10 @@ export async function stftFrame(
   }
   const wasm = await initWasm();
   const resolvedType = windowType === 'none' ? 'rect' : windowType;
-  const result = wasm.stft_frame(input, resolvedType, reference);
-  if (output) {
-    if (output.length !== result.length) {
-      throw new Error(
-        `stftFrame output length ${output.length} does not match ${result.length}`,
-      );
-    }
-    output.set(result);
-    return output;
-  }
-  // The returned array references WASM memory that may be overwritten later; copy or use `output` to persist.
-  return result;
+  // `stft_frame` ultimately returns a `Vec<f32>` from Rust, giving us an
+  // independent `Float32Array`. Returning it directly preserves this isolation
+  // without an extra memory copy.
+  return wasm.stft_frame(input, resolvedType, reference);
 }
 
 /**
@@ -226,7 +207,7 @@ export async function stftFrame(
  */
 export async function magnitudeDbfs(
   input: Float32Array,
-  reference: number = DEFAULT_REFERENCE_LEVEL,
+  reference = DEFAULT_REFERENCE_AMPLITUDE,
   output?: Float32Array,
 ): Promise<Float32Array> {
   if (!(input instanceof Float32Array)) {
@@ -242,18 +223,10 @@ export async function magnitudeDbfs(
     throw new TypeError('magnitudeDbfs output buffer must be a Float32Array');
   }
   const wasm = await initWasm();
-  const result = wasm.magnitude_dbfs(input, reference);
-  if (output) {
-    if (output.length !== result.length) {
-      throw new Error(
-        `magnitudeDbfs output length ${output.length} does not match ${result.length}`,
-      );
-    }
-    output.set(result);
-    return output;
-  }
-  // Result aliases WASM memory that may be recycled; copy or use `output` to retain values.
-  return result;
+  // Rust provides a new allocation for the magnitude spectrum, so the returned
+  // `Float32Array` already owns its data. Returning it verbatim avoids
+  // unnecessary cloning while ensuring immutability across calls.
+  return wasm.magnitude_dbfs(input, reference);
 }
 
 /** Spectro meta DTO mirrored from Rust for convenience. */
