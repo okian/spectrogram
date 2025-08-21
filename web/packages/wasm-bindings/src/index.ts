@@ -43,6 +43,12 @@ const FAILED_TO_FETCH_MSG = 'Failed to fetch';
 /** Substring present in Firefox network failures. */
 const NETWORK_ERROR_MSG = 'NetworkError';
 
+/**
+ * Default reference amplitude used for dBFS calculations.
+ * Why: avoids magic numbers and clearly documents expected reference level.
+ */
+const DEFAULT_REFERENCE_AMPLITUDE = 1.0;
+
 /** Cached WASM module once initialised for reuse across calls. */
 let wasmModule: WasmModule | null = null;
 /** Tracks ongoing initialization to deduplicate concurrent requests. */
@@ -102,7 +108,10 @@ export async function fftReal(input: Float32Array): Promise<Float32Array> {
     throw new Error('fftReal requires a non-empty input array');
   }
   const wasm = await initWasm();
-  return wasm.fft_real(input).slice();
+  // WASM exports already allocate new `Float32Array` instances in JS-owned memory.
+  // Returning them directly avoids an unnecessary copy while guaranteeing callers
+  // receive an isolated buffer.
+  return wasm.fft_real(input);
 }
 
 /**
@@ -124,7 +133,10 @@ export async function applyWindow(
   }
   const wasm = await initWasm();
   const resolvedType = windowType === 'none' ? 'rect' : windowType;
-  return wasm.apply_window(input, resolvedType).slice();
+  // The underlying Rust function returns a fresh `Vec<f32>` which wasm-bindgen
+  // converts into a standalone `Float32Array`. No additional duplication is
+  // required; exposing the buffer directly prevents wasted allocations.
+  return wasm.apply_window(input, resolvedType);
 }
 
 /**
@@ -134,7 +146,7 @@ export async function applyWindow(
 export async function stftFrame(
   input: Float32Array,
   windowType: 'hann' | 'hamming' | 'blackman' | 'none',
-  reference = 1.0,
+  reference = DEFAULT_REFERENCE_AMPLITUDE,
 ): Promise<Float32Array> {
   if (!(input instanceof Float32Array)) {
     throw new TypeError('stftFrame expects a Float32Array input');
@@ -150,7 +162,10 @@ export async function stftFrame(
   }
   const wasm = await initWasm();
   const resolvedType = windowType === 'none' ? 'rect' : windowType;
-  return wasm.stft_frame(input, resolvedType, reference).slice();
+  // `stft_frame` ultimately returns a `Vec<f32>` from Rust, giving us an
+  // independent `Float32Array`. Returning it directly preserves this isolation
+  // without an extra memory copy.
+  return wasm.stft_frame(input, resolvedType, reference);
 }
 
 /**
@@ -159,7 +174,7 @@ export async function stftFrame(
  */
 export async function magnitudeDbfs(
   input: Float32Array,
-  reference = 1.0,
+  reference = DEFAULT_REFERENCE_AMPLITUDE,
 ): Promise<Float32Array> {
   if (!(input instanceof Float32Array)) {
     throw new TypeError('magnitudeDbfs expects a Float32Array input');
@@ -171,7 +186,10 @@ export async function magnitudeDbfs(
     throw new Error('reference must be a positive finite number');
   }
   const wasm = await initWasm();
-  return wasm.magnitude_dbfs(input, reference).slice();
+  // Rust provides a new allocation for the magnitude spectrum, so the returned
+  // `Float32Array` already owns its data. Returning it verbatim avoids
+  // unnecessary cloning while ensuring immutability across calls.
+  return wasm.magnitude_dbfs(input, reference);
 }
 
 /** Spectro meta DTO mirrored from Rust for convenience. */
