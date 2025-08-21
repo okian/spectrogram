@@ -5,6 +5,28 @@ import { vi } from 'vitest';
 // Mock WASM bindings to avoid requiring compiled artifacts during tests
 vi.mock('@spectro/wasm-bindings', () => ({}), { virtual: true });
 
+// Mock data generation utilities to keep tests fast and deterministic
+const { mockGenerateMusicSignal, mockGenerateSTFTFrames } = vi.hoisted(() => ({
+  /** Generates a trivial music signal. */
+  mockGenerateMusicSignal: vi.fn(() => new Float32Array(1)),
+  /** Produces a single fake STFT frame. */
+  mockGenerateSTFTFrames: vi.fn(async () => [{ bins: new Float32Array(1), timestamp: 0 }])
+}));
+vi.mock('./utils/data-generator', () => ({
+  /** Returns one precomputed frame to simulate realistic data. */
+  generateRealisticSpectrogramData: vi.fn(async () => [{ bins: new Float32Array(1), timestamp: 0 }]),
+  /** Stub for typed signal generation. */
+  generateSignalByType: vi.fn(() => new Float32Array(1)),
+  /** Expose music signal mock. */
+  generateMusicSignal: mockGenerateMusicSignal,
+  /** Stub for mixed signal generation. */
+  generateMixedSignal: vi.fn(() => new Float32Array(1)),
+  /** Expose STFT frame mock. */
+  generateSTFTFrames: mockGenerateSTFTFrames,
+  /** Minimal DEFAULT_CONFIG consumed by generateData. */
+  DEFAULT_CONFIG: { sampleRate: 48000 }
+}));
+
 // Polyfill ResizeObserver for @react-three/fiber
 class ResizeObserverMock {
   observe() {}
@@ -134,6 +156,55 @@ describe('Spectrogram metadata handling', () => {
     const { container } = render(<Spectrogram config={{ showLegend: false, autoGenerate: false }} />);
     const div = container.firstChild as HTMLElement;
     expect(getComputedStyle(div).backgroundColor).toBe(hexToRgb(DEFAULT_BG));
+  });
+});
+
+describe('data generation callbacks', () => {
+  /** Verifies onDataGenerated fires after synthetic data generation. */
+  it('calls onDataGenerated when generation succeeds', async () => {
+    let api: SpectrogramAPI | null = null;
+    const cb = vi.fn();
+    render(
+      <Spectrogram
+        config={{ autoGenerate: false, showLegend: false }}
+        onReady={a => (api = a)}
+        onDataGenerated={cb}
+      />
+    );
+    await act(async () => {
+      await new Promise(res => setTimeout(res, 0));
+    });
+    if (!api) throw new Error('API not initialized');
+    act(() => api!.setMeta(makeMeta({ binCount: 1 })));
+    await act(async () => {
+      await api!.generateData('music');
+    });
+    expect(cb).toHaveBeenCalledWith({ frameCount: 1, type: 'music' });
+  });
+
+  /** Ensures onError fires when generation throws. */
+  it('calls onError when generation fails', async () => {
+    mockGenerateSTFTFrames.mockImplementationOnce(() => {
+      throw new Error('fail');
+    });
+    let api: SpectrogramAPI | null = null;
+    const errCb = vi.fn();
+    render(
+      <Spectrogram
+        config={{ autoGenerate: false, showLegend: false }}
+        onReady={a => (api = a)}
+        onError={errCb}
+      />
+    );
+    await act(async () => {
+      await new Promise(res => setTimeout(res, 0));
+    });
+    if (!api) throw new Error('API not initialized');
+    act(() => api!.setMeta(makeMeta({ binCount: 1 })));
+    await act(async () => {
+      await api!.generateData('music');
+    });
+    expect(errCb).toHaveBeenCalled();
   });
 });
 
