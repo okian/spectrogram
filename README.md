@@ -89,6 +89,9 @@ spectrogram/
    ```bash
    pnpm build:wasm
    ```
+   The generated `pkg/` directory is intentionally untracked.
+   Run this whenever the Rust sources change or before publishing so
+   WebAssembly artifacts are available.
 
 5. **Start the playground**
    ```bash
