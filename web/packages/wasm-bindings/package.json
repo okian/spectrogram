@@ -9,7 +9,11 @@
   "scripts": {
     "build": "pnpm run build:wasm && tsup",
     "build:wasm": "wasm-pack build ../../crates/dsp_core --out-dir pkg --target web --release",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "echo 'no tests configured'",
+    "test:unit": "echo 'no unit tests configured'",
+    "lint": "echo 'no lint configured'",
+    "format": "echo 'no format configured'"
   },
   "devDependencies": {
     "tsup": "^8.0.1",

@@ -29,4 +29,5 @@ export default defineConfig({
       branches: 50,
     },
   },
+
 });

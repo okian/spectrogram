@@ -27,12 +27,16 @@
     "vitest": "^1.6.0",
     "@testing-library/react": "^14.2.1",
     "jsdom": "^24.0.0",
+    "@types/node": "^20.11.30",
     "@vitest/coverage-v8": "^1.6.0"
   },
   "scripts": {
     "build": "tsup src/index.tsx --format esm,cjs --dts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --coverage"
+    "test": "vitest run --coverage",
+    "test:unit": "vitest run --coverage",
+    "lint": "echo 'no lint configured'",
+    "format": "echo 'no format configured'"
   }
 }
 
