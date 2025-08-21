@@ -5,11 +5,45 @@
  */
 
 import * as React from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { SpectroRingBuffer } from '../core/ring-buffer';
 import { generateLUT, type Palette } from '../palettes';
 import { DEFAULT_BG } from '../constants';
+
+/** Width of the generated color lookup table texture in pixels. */
+const LUT_WIDTH = 256;
+/** Height of the generated color lookup table texture in pixels. */
+const LUT_HEIGHT = 1;
+/** Side length of the square planes used for background and heatmap quads. */
+const PLANE_SIZE = 2;
+/** Number of grid lines to draw per axis in the overlay. */
+const GRID_LINE_COUNT = 10;
+/** Color used for grid overlay lines. */
+const GRID_LINE_COLOR = '#333';
+/** Transparency applied to grid overlay lines. */
+const GRID_LINE_OPACITY = 0.3;
+/** Minimum normalized coordinate for grid geometry. */
+const GRID_MIN = -1;
+/** Maximum normalized coordinate for grid geometry. */
+const GRID_MAX = 1;
+
+/**
+ * Derive the texture size for the shader from ring buffer statistics.
+ * What: Creates a {@link THREE.Vector2} representing the data texture dimensions.
+ * Why: Avoids hard-coded sizes and reflects the actual buffer configuration.
+ * How: Reads {@link SpectroRingBuffer.getStats} and validates the results.
+ */
+export function textureSizeFromRingBuffer(
+  ringBuffer: SpectroRingBuffer,
+  target: THREE.Vector2 = new THREE.Vector2()
+): THREE.Vector2 {
+  const { binCount, maxRows } = ringBuffer.getStats();
+  if (binCount <= 0 || maxRows <= 0) {
+    throw new Error(`Invalid ring buffer stats: bins=${binCount}, rows=${maxRows}`);
+  }
+  return target.set(binCount, maxRows);
+}
 
 /** Props for the 2D heatmap renderer. */
 interface Heatmap2DProps {
@@ -89,8 +123,6 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
   showGrid = false,
   background = DEFAULT_BG
 }) => {
-  const { gl } = useThree();
-  const meshRef = React.useRef<THREE.Mesh>(null);
   const materialRef = React.useRef<THREE.ShaderMaterial>(null);
   const [colorLUT, setColorLUT] = React.useState<THREE.DataTexture | null>(null);
 
@@ -99,8 +131,8 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
     const lut = generateLUT(palette);
     const texture = new THREE.DataTexture(
       lut,
-      256, // LUT width
-      1,   // LUT height
+      LUT_WIDTH,
+      LUT_HEIGHT,
       THREE.RGBAFormat,
       THREE.UnsignedByteType
     );
@@ -127,9 +159,11 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
       material.uniforms.dbFloor.value = dbFloor;
       material.uniforms.dbCeiling.value = dbCeiling;
       material.uniforms.paletteReverse.value = paletteReverse ? 1.0 : 0.0;
-      
-      const stats = ringBuffer.getStats();
-      material.uniforms.textureSize.value.set(stats.binCount, stats.maxRows);
+
+      textureSizeFromRingBuffer(
+        ringBuffer,
+        material.uniforms.textureSize.value as THREE.Vector2
+      );
     }
   });
 
@@ -137,24 +171,24 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
     <>
       {/* Background */}
       <mesh>
-        <planeGeometry args={[2, 2]} />
+        <planeGeometry args={[PLANE_SIZE, PLANE_SIZE]} />
         <meshBasicMaterial color={background} />
       </mesh>
-      
+
       {/* Heatmap quad */}
-      <mesh ref={meshRef}>
-        <planeGeometry args={[2, 2]} />
+      <mesh>
+        <planeGeometry args={[PLANE_SIZE, PLANE_SIZE]} />
         <shaderMaterial
-          ref={materialRef}
-          vertexShader={vertexShader}
-          fragmentShader={fragmentShader}
-          uniforms={{
+            ref={materialRef}
+            vertexShader={vertexShader}
+            fragmentShader={fragmentShader}
+            uniforms={{
             dataTexture: { value: null },
             colorLUT: { value: null },
             dbFloor: { value: dbFloor },
             dbCeiling: { value: dbCeiling },
             paletteReverse: { value: paletteReverse ? 1.0 : 0.0 },
-            textureSize: { value: new THREE.Vector2(1024, 512) }
+            textureSize: { value: textureSizeFromRingBuffer(ringBuffer) }
           }}
           transparent={true}
         />
@@ -177,46 +211,64 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
  * Why: Helps users interpret spectrogram data with visual guides.
  */
 interface GridOverlayProps {
+  /** Number of frequency bins; reserved for future adaptive grids. */
   binCount: number;
+  /** Maximum rows in the ring buffer; reserved for future adaptive grids. */
   maxRows: number;
 }
 
-const GridOverlay: React.FC<GridOverlayProps> = ({ binCount, maxRows }) => {
+const GridOverlay: React.FC<GridOverlayProps> = ({ binCount: _binCount, maxRows: _maxRows }) => {
   return (
     <group>
       {/* Frequency grid lines (horizontal) */}
-      {Array.from({ length: 10 }, (_, i) => (
+      {Array.from({ length: GRID_LINE_COUNT }, (_, i) => (
         <line key={`freq-${i}`}>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
               count={2}
               array={new Float32Array([
-                -1, -1 + (i * 2) / 9, 0,
-                1, -1 + (i * 2) / 9, 0
+                GRID_MIN,
+                GRID_MIN + (i * (GRID_MAX - GRID_MIN)) / (GRID_LINE_COUNT - 1),
+                0,
+                GRID_MAX,
+                GRID_MIN + (i * (GRID_MAX - GRID_MIN)) / (GRID_LINE_COUNT - 1),
+                0
               ])}
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial color="#333" transparent opacity={0.3} />
+          <lineBasicMaterial
+            color={GRID_LINE_COLOR}
+            transparent
+            opacity={GRID_LINE_OPACITY}
+          />
         </line>
       ))}
-      
+
       {/* Time grid lines (vertical) */}
-      {Array.from({ length: 10 }, (_, i) => (
+      {Array.from({ length: GRID_LINE_COUNT }, (_, i) => (
         <line key={`time-${i}`}>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
               count={2}
               array={new Float32Array([
-                -1 + (i * 2) / 9, -1, 0,
-                -1 + (i * 2) / 9, 1, 0
+                GRID_MIN + (i * (GRID_MAX - GRID_MIN)) / (GRID_LINE_COUNT - 1),
+                GRID_MIN,
+                0,
+                GRID_MIN + (i * (GRID_MAX - GRID_MIN)) / (GRID_LINE_COUNT - 1),
+                GRID_MAX,
+                0
               ])}
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial color="#333" transparent opacity={0.3} />
+          <lineBasicMaterial
+            color={GRID_LINE_COLOR}
+            transparent
+            opacity={GRID_LINE_OPACITY}
+          />
         </line>
       ))}
     </group>
