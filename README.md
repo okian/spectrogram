@@ -107,6 +107,9 @@ make setup
 # Start the playground
 make dev
 
+# Clean, rebuild (including WASM), and start the playground
+make dev-playground
+
 # Build all packages
 make build
 
