@@ -29,6 +29,46 @@ const GRID_MIN = -1;
 const GRID_MAX = 1;
 
 /**
+ * Generate vertex arrays for the grid overlay.
+ * What: Precomputes coordinates for horizontal and vertical grid lines as {@link Float32Array}s.
+ * Why: Avoids per-render allocations and ensures stable geometry data.
+ * How: Evenly interpolates positions between {@link GRID_MIN} and {@link GRID_MAX} for the given count.
+ */
+export function generateGridLineVertices(
+  lineCount: number = GRID_LINE_COUNT,
+  min: number = GRID_MIN,
+  max: number = GRID_MAX
+): { horizontal: Float32Array[]; vertical: Float32Array[] } {
+  if (lineCount < 2) {
+    throw new Error(`lineCount must be at least 2; got ${lineCount}`);
+  }
+  const horizontal: Float32Array[] = [];
+  const vertical: Float32Array[] = [];
+  for (let i = 0; i < lineCount; i++) {
+    const t = min + (i * (max - min)) / (lineCount - 1);
+    horizontal.push(new Float32Array([min, t, 0, max, t, 0]));
+    vertical.push(new Float32Array([t, min, 0, t, max, 0]));
+  }
+  return { horizontal, vertical };
+}
+
+/**
+ * Precomputed grid line vertex arrays reused across renders.
+ * What: Memoizes geometry data at module load.
+ * Why: Prevents repeated allocation of identical vertex buffers.
+ */
+const GRID_LINE_VERTICES = generateGridLineVertices();
+
+/**
+ * Retrieve precomputed grid line vertices.
+ * What: Exposes memoized geometry data.
+ * Why: Enables reuse and testing of the cached vertex arrays.
+ */
+export function getGridLineVertices() {
+  return GRID_LINE_VERTICES;
+}
+
+/**
  * Derive the texture size for the shader from ring buffer statistics.
  * What: Creates a {@link THREE.Vector2} representing the data texture dimensions.
  * Why: Avoids hard-coded sizes and reflects the actual buffer configuration.
@@ -130,7 +170,7 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
   React.useEffect(() => {
     const lut = generateLUT(palette);
     const texture = new THREE.DataTexture(
-      lut,
+      lut as unknown as BufferSource,
       LUT_WIDTH,
       LUT_HEIGHT,
       THREE.RGBAFormat,
@@ -206,9 +246,9 @@ export const Heatmap2D: React.FC<Heatmap2DProps> = ({
 };
 
 /**
- * Grid overlay component for frequency and time markers.
- * What: Renders grid lines for frequency and time reference.
- * Why: Helps users interpret spectrogram data with visual guides.
+ * Props for {@link GridOverlay}.
+ * What: Configuration values for future adaptive grids.
+ * Why: Allows the overlay to scale with ring buffer dimensions.
  */
 interface GridOverlayProps {
   /** Number of frequency bins; reserved for future adaptive grids. */
@@ -217,24 +257,22 @@ interface GridOverlayProps {
   maxRows: number;
 }
 
-const GridOverlay: React.FC<GridOverlayProps> = ({ binCount: _binCount, maxRows: _maxRows }) => {
+/**
+ * Grid overlay component for frequency and time markers.
+ * What: Displays precomputed horizontal and vertical lines as references.
+ * Why: Reuses memoized geometry to minimize allocations on rerender.
+ */
+export const GridOverlay: React.FC<GridOverlayProps> = ({ binCount: _binCount, maxRows: _maxRows }) => {
   return (
     <group>
       {/* Frequency grid lines (horizontal) */}
-      {Array.from({ length: GRID_LINE_COUNT }, (_, i) => (
+      {GRID_LINE_VERTICES.horizontal.map((array, i) => (
         <line key={`freq-${i}`}>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
               count={2}
-              array={new Float32Array([
-                GRID_MIN,
-                GRID_MIN + (i * (GRID_MAX - GRID_MIN)) / (GRID_LINE_COUNT - 1),
-                0,
-                GRID_MAX,
-                GRID_MIN + (i * (GRID_MAX - GRID_MIN)) / (GRID_LINE_COUNT - 1),
-                0
-              ])}
+              array={array}
               itemSize={3}
             />
           </bufferGeometry>
@@ -247,20 +285,13 @@ const GridOverlay: React.FC<GridOverlayProps> = ({ binCount: _binCount, maxRows:
       ))}
 
       {/* Time grid lines (vertical) */}
-      {Array.from({ length: GRID_LINE_COUNT }, (_, i) => (
+      {GRID_LINE_VERTICES.vertical.map((array, i) => (
         <line key={`time-${i}`}>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
               count={2}
-              array={new Float32Array([
-                GRID_MIN + (i * (GRID_MAX - GRID_MIN)) / (GRID_LINE_COUNT - 1),
-                GRID_MIN,
-                0,
-                GRID_MIN + (i * (GRID_MAX - GRID_MIN)) / (GRID_LINE_COUNT - 1),
-                GRID_MAX,
-                0
-              ])}
+              array={array}
               itemSize={3}
             />
           </bufferGeometry>
