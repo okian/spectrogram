@@ -133,17 +133,34 @@ export const SIGNAL_PRESETS: Record<SignalType, SignalTypeConfig> = {
  * Generate a realistic test signal with multiple frequencies and noise.
  * What: Creates a complex audio signal with multiple components
  * Why: Provides realistic data for testing spectrogram visualization
+ * How: Validates inputs then synthesizes summed sine waves with optional
+ *      modulation, harmonics, and noise.
  */
 export function generateTestSignal(
-  length: number, 
-  sampleRate: number, 
-  frequencies: number[], 
+  length: number,
+  sampleRate: number,
+  frequencies: number[],
   amplitudes: number[],
   noiseLevel: number = 0.05,
   modulation: boolean = false,
   harmonics: boolean = false,
   timeVarying: boolean = false
 ): Float32Array {
+  // Validate array lengths and amplitude ranges to avoid runtime errors
+  if (frequencies.length !== amplitudes.length) {
+    throw new Error(
+      'frequencies and amplitudes arrays must have the same length'
+    );
+  }
+
+  for (const amp of amplitudes) {
+    if (!Number.isFinite(amp) || amp < 0 || amp > MAX_AMPLITUDE) {
+      throw new Error(
+        `amplitudes must be finite numbers within [0, ${MAX_AMPLITUDE}]`
+      );
+    }
+  }
+
   const signal = new Float32Array(length);
   const timeStep = 1.0 / sampleRate;
   
