@@ -22,7 +22,12 @@ export default defineConfig({
     globals: true,
     coverage: {
       reporter: ['text', 'html'],
-      include: ['src/index.tsx', 'src/core/ring-buffer.ts'],
+      include: [
+        'src/index.tsx',
+        'src/core/ring-buffer.ts',
+        // Include utility generators to ensure they maintain test coverage
+        'src/utils/data-generator.ts',
+      ],
       lines: 50,
       functions: 50,
       statements: 50,

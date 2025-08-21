@@ -400,53 +400,87 @@ export function generateMixedSignal(
 }
 
 /**
+ * Two times Pi, used for oscillation calculations.
+ * What: Reusable constant for sine computations.
+ * Why: Avoids repeated multiplications and clarifies intent.
+ */
+const TWO_PI = 2 * Math.PI;
+
+/**
+ * Chord progression used to synthesize a simple loop.
+ * What: Array of chords with frequencies for each note.
+ * Why: Defined once to avoid reallocation on each call.
+ */
+const CHORDS: number[][] = [
+  [220, 277, 330, 440], // A major
+  [185, 220, 277, 370], // F# minor
+  [147, 185, 220, 294], // D major
+  [165, 207, 247, 330]  // E major
+];
+
+/** Duration each chord is played, in seconds. */
+const CHORD_DURATION_SECONDS = 2;
+/** Base amplitude for the root note of each chord. */
+const ROOT_NOTE_AMPLITUDE = 0.3;
+/** Relative amplitude applied to generated harmonics. */
+const HARMONIC_MULTIPLIER = 0.2;
+/** Number of harmonics to generate per note. */
+const HARMONIC_COUNT = 3;
+/** Base level for rhythm modulation. */
+const RHYTHM_BASE_LEVEL = 0.5;
+/** Depth of rhythm modulation. */
+const RHYTHM_DEPTH = 0.5;
+/** Frequency of rhythm modulation in hertz. */
+const RHYTHM_FREQUENCY = 0.5;
+/** Amplitude of random noise added for realism. */
+const NOISE_AMPLITUDE = 0.02;
+
+/**
  * Generate a realistic music-like signal with chord progressions.
- * What: Creates musical content with changing harmonies over time
- * Why: Provides engaging, familiar audio content for demonstration
+ * What: Creates musical content with changing harmonies over time.
+ * Why: Provides engaging, familiar audio content for demonstration.
+ * How: Synthesizes chords, applies harmonics, rhythm modulation and noise.
  */
 export function generateMusicSignal(
   length: number,
   sampleRate: number
 ): Float32Array {
+  if (length <= 0) {
+    throw new Error('length must be positive');
+  }
+  if (sampleRate <= 0) {
+    throw new Error('sampleRate must be positive');
+  }
+
   const signal = new Float32Array(length);
-  const timeStep = 1.0 / sampleRate;
-  
-  // Define chord progressions (A major, F# minor, D major, E major)
-  const chords = [
-    [220, 277, 330, 440], // A major
-    [185, 220, 277, 370], // F# minor
-    [147, 185, 220, 294], // D major
-    [165, 207, 247, 330]  // E major
-  ];
-  
-  const chordDuration = 2.0; // 2 seconds per chord
-  const chordSamples = Math.floor(chordDuration * sampleRate);
-  
+  const timeStep = 1 / sampleRate;
+  const chordSamples = Math.floor(CHORD_DURATION_SECONDS * sampleRate);
+
   for (let i = 0; i < length; i++) {
     const time = i * timeStep;
-    const chordIndex = Math.floor(time / chordDuration) % chords.length;
-    const chord = chords[chordIndex];
-    
+    const chordIndex = Math.floor(i / chordSamples) % CHORDS.length;
+    const chord = CHORDS[chordIndex];
+
     let sample = 0;
     chord.forEach((freq, noteIndex) => {
-      const noteAmp = 0.3 / (noteIndex + 1); // Root note louder
-      sample += noteAmp * Math.sin(2 * Math.PI * freq * time);
-      
-      // Add harmonics for richer sound
-      for (let h = 2; h <= 3; h++) {
-        sample += (noteAmp * 0.2 / h) * Math.sin(2 * Math.PI * freq * h * time);
+      const noteAmp = ROOT_NOTE_AMPLITUDE / (noteIndex + 1);
+      sample += noteAmp * Math.sin(TWO_PI * freq * time);
+
+      for (let h = 2; h <= HARMONIC_COUNT; h++) {
+        sample +=
+          (noteAmp * HARMONIC_MULTIPLIER / h) *
+          Math.sin(TWO_PI * freq * h * time);
       }
     });
-    
-    // Add gentle rhythm modulation
-    const rhythm = 0.5 + 0.5 * Math.sin(2 * Math.PI * 0.5 * time);
-    sample *= rhythm;
-    
-    // Add subtle noise for realism
-    sample += 0.02 * (Math.random() * 2 - 1);
-    
+
+    const rhythm =
+      RHYTHM_BASE_LEVEL +
+      RHYTHM_DEPTH * Math.sin(TWO_PI * RHYTHM_FREQUENCY * time);
+    sample = sample * rhythm +
+      NOISE_AMPLITUDE * (Math.random() * 2 - 1);
+
     signal[i] = sample;
   }
-  
+
   return signal;
 }
