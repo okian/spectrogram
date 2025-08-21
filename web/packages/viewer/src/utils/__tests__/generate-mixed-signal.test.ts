@@ -61,4 +61,32 @@ describe('generateMixedSignal', () => {
       ])
     ).toThrow('length must be positive');
   });
+
+  it('throws on non-positive sample rate', () => {
+    expect(() =>
+      generateMixedSignal(TEST_LENGTH, 0, [
+        { type: 'music', amplitude: 1 }
+      ])
+    ).toThrow('sampleRate must be positive');
+  });
+
+  it('throws when amplitude is out of range', () => {
+    expect(() =>
+      generateMixedSignal(TEST_LENGTH, TEST_SAMPLE_RATE, [
+        { type: 'music', amplitude: 1.5 }
+      ])
+    ).toThrow(/amplitudes must be finite numbers/);
+  });
+
+  it('throws when signal generator returns wrong length', () => {
+    const badGenerator = () => new Float32Array([1, -1]);
+    expect(() =>
+      generateMixedSignal(
+        TEST_LENGTH,
+        TEST_SAMPLE_RATE,
+        [{ type: 'music', amplitude: 1 }],
+        badGenerator
+      )
+    ).toThrow('signalGenerator must return array of requested length');
+  });
 });

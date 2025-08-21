@@ -425,23 +425,35 @@ export function generateMixedSignal(
     throw new Error('sources array must contain at least one element');
   }
 
+  // First pass: sum all source signals without extra work to minimize per-sample overhead
   const mixedSignal = new Float32Array(length);
-  let maxAbs = 0;
 
-  for (const source of sources) {
-    const sourceSignal = signalGenerator(length, sampleRate, source.type);
-    const amplitude = source.amplitude;
+  for (const { type, amplitude } of sources) {
+    if (!Number.isFinite(amplitude) || amplitude < 0 || amplitude > MAX_AMPLITUDE) {
+      throw new Error(`amplitudes must be finite numbers within [0, ${MAX_AMPLITUDE}]`);
+    }
+
+    const sourceSignal = signalGenerator(length, sampleRate, type);
+    if (sourceSignal.length !== length) {
+      throw new Error('signalGenerator must return array of requested length');
+    }
     for (let i = 0; i < length; i++) {
       mixedSignal[i] += sourceSignal[i] * amplitude;
-      const absVal = Math.abs(mixedSignal[i]);
-      if (absVal > maxAbs) {
-        maxAbs = absVal;
-      }
     }
   }
 
+  // Second pass: find maximum absolute value to determine if normalization is required
+  let maxAbs = 0;
+  for (let i = 0; i < length; i++) {
+    const absVal = Math.abs(mixedSignal[i]);
+    if (absVal > maxAbs) {
+      maxAbs = absVal;
+    }
+  }
+
+  // Third pass: normalize only when necessary to avoid clipping
   if (maxAbs > MAX_AMPLITUDE) {
-    const scale = 1 / maxAbs;
+    const scale = MAX_AMPLITUDE / maxAbs;
     for (let i = 0; i < length; i++) {
       mixedSignal[i] *= scale;
     }
