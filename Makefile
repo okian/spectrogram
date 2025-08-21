@@ -48,7 +48,10 @@ dev: ## Start playground development server
 	@echo "🎮 Starting playground development server..."
 	npx -y pnpm@9.0.0 dev:playground
 
-dev-playground: ## Start playground development server (alias for dev)
+dev-playground: ## Clean, build (including WASM), then start playground server
+	$(MAKE) clean
+	$(MAKE) wasm
+	$(MAKE) build
 	$(MAKE) dev
 
 dev-shell: ## Start shell app development server (if implemented)

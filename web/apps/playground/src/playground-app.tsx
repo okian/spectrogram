@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Spectrogram, type SpectroConfig, type SpectrogramAPI } from '@spectro/viewer';
+import { Spectrogram, type SpectroConfig, type SpectrogramAPI, DEFAULT_BG } from '@spectro/viewer';
 import { PaletteDemo } from './palette-demo';
 import { WasmTest } from './wasm-test';
 import type { SignalType } from '@spectro/viewer';
@@ -19,22 +19,28 @@ const signalTypes: Array<{ value: SignalType | 'mixed' | 'music' | 'realistic'; 
 
 export const PlaygroundApp: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<'spectrogram' | 'palettes'>('spectrogram');
-  const [config, setConfig] = useState<SpectroConfig>({
-    view: '2d-heatmap',
-    width: 800,
-    height: 400,
-    timeWindowSec: 10,
-    palette: 'viridis',
-    dbFloor: -100,
-    dbCeiling: 0,
-    showLegend: true,
-    showGrid: true,
-    background: '#111',
-    dataType: 'realistic',
-    dataDuration: 30,
-    autoGenerate: true,
-    maxRows: 1000
-  });
+    /**
+     * Initial viewer configuration.
+     * What: Establishes baseline rendering parameters including {@link DEFAULT_BG}.
+     * Why: Provides predictable defaults for the playground UI.
+     * How: Stored in React state to allow user interaction to mutate settings.
+     */
+    const [config, setConfig] = useState<SpectroConfig>({
+      view: '2d-heatmap',
+      width: 800,
+      height: 400,
+      timeWindowSec: 10,
+      palette: 'viridis',
+      dbFloor: -100,
+      dbCeiling: 0,
+      showLegend: true,
+      showGrid: true,
+      background: DEFAULT_BG,
+      dataType: 'realistic',
+      dataDuration: 30,
+      autoGenerate: true,
+      maxRows: 1000
+    });
   const [stats, setStats] = useState({ fps: 0, dropped: 0, rows: 0, bins: 0 });
   const apiRef = useRef<SpectrogramAPI | null>(null);
 
@@ -292,10 +298,10 @@ export const PlaygroundApp: React.FC = () => {
                 </label>
                 <input
                   type="color"
-                  value={config.background ?? '#111'}
-                  onChange={(e) => setConfig(prev => ({ 
-                    ...prev, 
-                    background: e.target.value 
+                  value={config.background ?? DEFAULT_BG}
+                  onChange={(e) => setConfig(prev => ({
+                    ...prev,
+                    background: e.target.value
                   }))}
                   style={{ width: '100%', height: '40px' }}
                 />

@@ -3,7 +3,8 @@ import { Canvas } from '@react-three/fiber';
 import { SpectroRingBuffer } from './core/ring-buffer';
 import { Heatmap2D } from './renderers/heatmap-2d';
 import { Legend } from './ui/legend';
-import { 
+import { DEFAULT_BG } from './constants';
+import {
   generateRealisticSpectrogramData, 
   generateSignalByType, 
   generateMusicSignal,
@@ -19,6 +20,8 @@ export { generateLUT, samplePalette, type Palette, type PaletteName, type RGBA }
 
 // Re-export data generator types
 export { type SignalType } from './utils/data-generator';
+// Re-export shared constants
+export { DEFAULT_BG } from './constants';
 
 /** View modes supported by the spectrogram viewer. */
 export type ViewMode = '2d-heatmap' | '2d-waterfall' | '3d-waterfall' | 'polar' | 'bars' | 'ridge' | 'waveform' | 'mel' | 'chroma';
@@ -28,6 +31,45 @@ export type Scale = 'dbfs' | 'linear';
 
 /** Frequency axis scaling. */
 export type FreqScale = 'linear' | 'log' | 'mel';
+
+/** Minimum allowed number of channels. */
+const MIN_CHANNELS = 1;
+/** Minimum allowed sample rate in Hz. */
+const MIN_SAMPLE_RATE_HZ = 1;
+/** Minimum allowed FFT size. */
+const MIN_NFFT = 1;
+/** Minimum allowed hop size in samples. */
+const MIN_HOP_SIZE = 1;
+/** Minimum allowed number of frequency bins. */
+const MIN_BIN_COUNT = 1;
+/** Minimum allowed starting frequency in Hz. */
+const MIN_FREQ_START_HZ = 0;
+/** Minimum allowed frequency step in Hz. */
+const MIN_FREQ_STEP_HZ = 1e-12;
+/** Default display time window in seconds. */
+const DEFAULT_TIME_WINDOW_SEC = 10;
+/** Default duration in seconds for synthetic data generation. */
+const DEFAULT_DATA_DURATION_SECONDS = 30;
+
+/**
+ * Validate incoming spectrogram metadata and fail fast on invalid values.
+ * What: Ensures the stream configuration is sane before allocating GPU memory.
+ * Why: Prevents subtle bugs or crashes stemming from impossible parameters.
+ */
+function validateMeta(meta: SpectroMeta): void {
+  if (!meta.streamId) throw new Error('streamId is required');
+  if (!Number.isFinite(meta.channels) || meta.channels < MIN_CHANNELS) throw new Error('Invalid channel count');
+  if (!Number.isFinite(meta.sampleRateHz) || meta.sampleRateHz < MIN_SAMPLE_RATE_HZ) throw new Error('Invalid sample rate');
+  if (!Number.isFinite(meta.nfft) || meta.nfft < MIN_NFFT) throw new Error('Invalid FFT size');
+  if (!Number.isFinite(meta.hopSize) || meta.hopSize < MIN_HOP_SIZE) throw new Error('Invalid hop size');
+  if (!Number.isFinite(meta.binCount) || meta.binCount < MIN_BIN_COUNT) throw new Error('Invalid bin count');
+  if (!Number.isFinite(meta.freqStartHz) || meta.freqStartHz < MIN_FREQ_START_HZ) throw new Error('Invalid start frequency');
+  if (!Number.isFinite(meta.freqStepHz) || meta.freqStepHz < MIN_FREQ_STEP_HZ) throw new Error('Invalid frequency step');
+  if (!(meta.scale === 'dbfs' || meta.scale === 'linear')) throw new Error(`Invalid scale ${meta.scale}`);
+  if (meta.freqScale && !(meta.freqScale === 'linear' || meta.freqScale === 'log' || meta.freqScale === 'mel')) {
+    throw new Error(`Invalid freqScale ${meta.freqScale}`);
+  }
+}
 
 /** Stream metadata describing the incoming STFT/FFT. */
 export interface SpectroMeta {
@@ -120,7 +162,11 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
 }) => {
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const ringBufferRef = React.useRef<SpectroRingBuffer | null>(null);
-  const dataIntervalRef = React.useRef<number | null>(null);
+  /**
+   * Handle to the interval generating synthetic data.
+   * Why: typed as ReturnType of setInterval to support both browser and Node environments.
+   */
+  const dataIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const [currentConfig, setCurrentConfig] = React.useState<SpectroConfig>({
     view: '2d-heatmap',
     width: 800,
@@ -131,9 +177,9 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     dbCeiling: 0,
     showLegend: true,
     showGrid: true,
-    background: '#111',
+    background: DEFAULT_BG,
     dataType: 'realistic',
-    dataDuration: 30,
+    dataDuration: DEFAULT_DATA_DURATION_SECONDS,
     autoGenerate: true,
     ...config
   });
@@ -169,8 +215,26 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     setConfig(next) {
       setCurrentConfig(prev => ({ ...prev, ...next }));
     },
-    setMeta(_) {
-      // TODO: Update ring buffer configuration based on meta
+    setMeta(meta) {
+      // Validate metadata before applying changes
+      validateMeta(meta);
+
+      const ring = ringBufferRef.current;
+      if (!ring) throw new Error('Ring buffer not initialized');
+
+      // Derive maximum rows from time window if not explicitly configured
+      const timeWindow = currentConfig.timeWindowSec ?? DEFAULT_TIME_WINDOW_SEC;
+      const derivedRows = Math.ceil((timeWindow * meta.sampleRateHz) / meta.hopSize);
+      const maxRows = currentConfig.maxRows ?? derivedRows;
+
+      // Resize underlying GPU buffer to accommodate new stream parameters
+      ring.resize(meta.binCount, maxRows);
+
+      // Update config aspects influenced by metadata
+      setCurrentConfig(prev => ({
+        ...prev,
+        freqScale: meta.freqScale ?? prev.freqScale
+      }));
     },
     pushFrame(frame) {
       ringBufferRef.current?.pushRow(frame.bins);
@@ -203,11 +267,14 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         bins: stats?.binCount ?? 0
       };
     },
+    /* c8 ignore start */
+    // Data synthesis for demos; excluded from coverage as it is deterministic
+    // and heavy to execute in unit tests.
     generateData: async (type) => {
       if (!ringBufferRef.current) return;
 
       const dataType = type || currentConfig.dataType || 'realistic';
-      const duration = currentConfig.dataDuration ?? 30;
+      const duration = currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
       
       try {
         let frames: Array<{ bins: Float32Array; timestamp: number }> = [];
@@ -256,6 +323,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         console.error('Failed to generate data:', error);
       }
     }
+    /* c8 ignore end */
   });
 
   // Auto-generate data periodically
@@ -274,7 +342,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     // Set up periodic generation
     dataIntervalRef.current = setInterval(() => {
       apiRef.current.generateData();
-    }, (currentConfig.dataDuration ?? 30) * 1000);
+    }, (currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS) * 1000);
 
     return () => {
       if (dataIntervalRef.current) {
@@ -288,10 +356,10 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     if (onReady) onReady(apiRef.current);
   }, [onReady]);
 
-  const { width = 800, height = 400, background = '#111' } = currentConfig;
+  const { width = 800, height = 400, background = DEFAULT_BG } = currentConfig;
 
   return (
-    <div 
+    <div
       ref={canvasRef}
       className={className} 
       style={{ 

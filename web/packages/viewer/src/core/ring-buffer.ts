@@ -18,6 +18,10 @@ const TEXTURE_TYPE_BY_FORMAT: Record<RingBufferConfig['format'], THREE.TextureDa
   R16F: THREE.HalfFloatType,
   UNORM8: THREE.UnsignedByteType
 };
+/** Maximum value of an unsigned 8-bit integer for normalization. */
+const UINT8_MAX = 255;
+/** Maximum value of an unsigned 16-bit integer for normalization. */
+const UINT16_MAX = 65535;
 
 /** Ring buffer configuration. */
 export interface RingBufferConfig {
@@ -86,6 +90,22 @@ export class SpectroRingBuffer {
       data,
       width,
       height,
+  /** Scratch buffer reused for integer-to-float conversion. */
+  private scratch: Float32Array;
+
+  constructor(gl: WebGLRenderingContext, config: RingBufferConfig) {
+    this.gl = gl;
+    this.config = config;
+    
+    // Allocate data buffer and scratch space
+    this.data = new Float32Array(config.binCount * config.maxRows);
+    this.scratch = new Float32Array(config.binCount);
+    
+    // Create GPU texture
+    this.texture = new THREE.DataTexture(
+      this.data,
+      config.binCount,
+      config.maxRows,
       THREE.RedFormat,
       TEXTURE_TYPE_BY_FORMAT[this.config.format]
     );
@@ -120,7 +140,23 @@ export class SpectroRingBuffer {
       throw new Error(`${format} format requires Float32Array input.`);
     }
 
-    // Copy data into the ring buffer storage.
+    // Convert to float32 if needed without allocating each call
+    let floatBins: Float32Array;
+    if (bins instanceof Float32Array) {
+      floatBins = bins;
+    } else if (bins instanceof Uint16Array) {
+      for (let i = 0; i < binCount; i++) {
+        this.scratch[i] = bins[i] / UINT16_MAX;
+      }
+      floatBins = this.scratch;
+    } else {
+      for (let i = 0; i < binCount; i++) {
+        this.scratch[i] = bins[i] / UINT8_MAX;
+      }
+      floatBins = this.scratch;
+    }
+
+    // Copy data to ring buffer
     const offset = this.writeRow * binCount;
     if (this.data instanceof Float32Array && bins instanceof Float32Array) {
       this.data.set(bins, offset);
@@ -187,6 +223,10 @@ export class SpectroRingBuffer {
 
     // Reallocate CPU buffer and recreate GPU texture.
     this.data = this.createDataArray(binCount * maxRows);
+    
+    this.scratch = new Float32Array(binCount);
+    
+    // Recreate GPU texture
     this.texture.dispose();
     this.texture = this.createTexture(this.data, binCount, maxRows);
 
