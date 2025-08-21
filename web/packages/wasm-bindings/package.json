@@ -8,7 +8,6 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "pnpm run build:wasm && tsup && cp -r pkg dist/pkg",
-    "typecheck": "tsc -p tsconfig.json",
     "test": "pnpm build:wasm && c8 -r text tsx test/wasm-bindings.test.ts",
     "build:wasm": "wasm-pack build ../../crates/dsp_core --out-dir ../../packages/wasm-bindings/pkg --target web --release",
     "test:unit": "echo 'no unit tests configured'",
