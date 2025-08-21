@@ -243,9 +243,12 @@ export type SpectrogramProps = {
   style?: React.CSSProperties;
   /** Callback fired once the renderer is ready and API initialized. */
   onReady?(api: SpectrogramAPI): void;
-  onHover?(p: SpectroEvent): void;
+  onHover?(p: { timeSec: number; freqHz: number; mag: number; magDb?: number; bin: number; row: number }): void;
   onClick?(p: SpectroEvent): void;
-  /** Callback delivering cursor sample information during hover interactions. */
+  /** Called after synthetic data generation completes. */
+  onDataGenerated?(p: { frameCount: number; type: string }): void;
+  /** Called when data generation fails. */
+  onError?(error: unknown): void;
 };
 
 /**
@@ -258,7 +261,10 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   className,
   style,
   onReady,
-  onHover
+  onHover,
+  onClick,
+  onDataGenerated,
+  onError
 }) => {
   const canvasRef = React.useRef<HTMLDivElement>(null);
   /** Renderer supplied by react-three-fiber. */
@@ -292,6 +298,24 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   });
   /** Flag indicating the rendering pipeline is initialized. */
   const [ready, setReady] = React.useState(false);
+
+  /** Holds latest configuration to avoid stale closures in API methods. */
+  const configRef = React.useRef(currentConfig);
+  React.useEffect(() => {
+    configRef.current = currentConfig;
+  }, [currentConfig]);
+
+  /** Latest onDataGenerated callback for internal use. */
+  const onDataGeneratedRef = React.useRef<SpectrogramProps['onDataGenerated']>();
+  React.useEffect(() => {
+    onDataGeneratedRef.current = onDataGenerated;
+  }, [onDataGenerated]);
+
+  /** Latest onError callback for internal use. */
+  const onErrorRef = React.useRef<SpectrogramProps['onError']>();
+  React.useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   /**
    * (Re)create the GPU ring buffer using the current WebGL context.
@@ -342,7 +366,11 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
 
   const apiRef = React.useRef<SpectrogramAPI>({
     setConfig(next) {
-      setCurrentConfig(prev => ({ ...prev, ...next }));
+      setCurrentConfig(prev => {
+        const updated = { ...prev, ...next };
+        configRef.current = updated;
+        return updated;
+      });
     },
     setMeta(meta) {
       // Validate metadata before applying changes
@@ -352,18 +380,19 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
       if (!ring) throw new Error('Ring buffer not initialized');
 
       // Derive maximum rows from time window if not explicitly configured
-      const timeWindow = currentConfig.timeWindowSec ?? DEFAULT_TIME_WINDOW_SEC;
+      const timeWindow = configRef.current.timeWindowSec ?? DEFAULT_TIME_WINDOW_SEC;
       const derivedRows = Math.ceil((timeWindow * meta.sampleRateHz) / meta.hopSize);
-      const maxRows = currentConfig.maxRows ?? derivedRows;
+      const maxRows = configRef.current.maxRows ?? derivedRows;
 
       // Resize underlying GPU buffer to accommodate new stream parameters
       ring.resize(meta.binCount, maxRows);
 
       // Update config aspects influenced by metadata
-      setCurrentConfig(prev => ({
-        ...prev,
-        freqScale: meta.freqScale ?? prev.freqScale
-      }));
+      setCurrentConfig(prev => {
+        const next = { ...prev, freqScale: meta.freqScale ?? prev.freqScale };
+        configRef.current = next;
+        return next;
+      });
     },
     pushFrame(frame) {
       ringBufferRef.current?.pushRow(frame.bins);
@@ -380,7 +409,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
       const renderer = rendererRef.current;
       if (!renderer) return;
 
-      const { width = 800, height = 400 } = currentConfig;
+      const { width = 800, height = 400 } = configRef.current;
       if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
         throw new Error('Invalid canvas dimensions');
       }
@@ -421,9 +450,6 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         if (info && typeof info !== 'function') throw new Error('logger.info must be a function');
         if (error && typeof error !== 'function') throw new Error('logger.error must be a function');
       }
-
-      const dataType = type || currentConfig.dataType || 'realistic';
-      const duration = currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
 
       try {
         let frames: Array<{ bins: Float32Array; timestamp: number }> = [];
@@ -493,6 +519,11 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
           ringBufferRef.current?.pushRow(frame.bins);
         });
 
+        // Notify consumers of successful generation without noisy logs
+        onDataGeneratedRef.current?.({ frameCount: frames.length, type: dataType });
+      } catch (error) {
+        // Surface errors through callback for controlled handling
+        onErrorRef.current?.(error);
         opts.logger?.info?.(`Generated ${frames.length} frames of ${dataType} data`);
         opts.onProgress?.({ frameCount: frames.length, type: dataType });
         
