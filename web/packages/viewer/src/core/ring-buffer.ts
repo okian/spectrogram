@@ -16,6 +16,8 @@ const TEXTURE_TYPE_BY_FORMAT: Record<RingBufferConfig['format'], THREE.TextureDa
 const UINT8_MAX = 255;
 /** Maximum value of an unsigned 16-bit integer for normalization. */
 const UINT16_MAX = 65535;
+/** Minimum permissible value for dimensional parameters to prevent empty buffers. */
+const MIN_DIMENSION = 1;
 
 /** Configuration describing ring buffer behaviour. */
 export interface RingBufferConfig {
@@ -53,7 +55,8 @@ export class SpectroRingBuffer {
   /**
    * Construct a ring buffer bound to a WebGL context.
    * @param gl - Rendering context used for uploads.
-   * @param config - Behavioural configuration.
+   * @param config - Behavioural configuration where {@link RingBufferConfig.binCount} and
+   * {@link RingBufferConfig.maxRows} must be finite positive integers.
    */
   constructor(gl: WebGLRenderingContext, config: RingBufferConfig) {
     this.gl = gl;
@@ -61,6 +64,7 @@ export class SpectroRingBuffer {
     this.verifyFloatTextureSupport();
 
     const { binCount, maxRows } = this.config;
+    this.validateDimensions(binCount, maxRows);
     this.data = this.createDataArray(binCount * maxRows);
     this.scratch = new Float32Array(binCount);
     this.texture = this.createTexture(this.data, binCount, maxRows);
@@ -134,6 +138,21 @@ export class SpectroRingBuffer {
   }
 
   /**
+   * Ensure provided dimensions are finite positive integers.
+   * @param binCount - Desired number of frequency bins per row.
+   * @param maxRows - Desired number of rows to allocate.
+   * @throws When either dimension is non-integer, non-finite, or below {@link MIN_DIMENSION}.
+   */
+  private validateDimensions(binCount: number, maxRows: number): void {
+    if (!Number.isFinite(binCount) || !Number.isInteger(binCount) || binCount < MIN_DIMENSION) {
+      throw new Error('binCount must be a finite positive integer.');
+    }
+    if (!Number.isFinite(maxRows) || !Number.isInteger(maxRows) || maxRows < MIN_DIMENSION) {
+      throw new Error('maxRows must be a finite positive integer.');
+    }
+  }
+
+  /**
    * Push a single row of frequency bins into the buffer.
    * @param bins - Normalised frequency magnitudes.
    */
@@ -173,7 +192,7 @@ export class SpectroRingBuffer {
       uploadData = floats;
     }
 
-    const gl = this.gl;
+    const gl = this.gl as WebGLRenderingContext & { RED: number };
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.texSubImage2D(
       gl.TEXTURE_2D,
@@ -190,6 +209,24 @@ export class SpectroRingBuffer {
     this.writeRow = (this.writeRow + 1) % maxRows;
     this.rowCount = Math.min(this.rowCount + 1, maxRows);
     this.texture.needsUpdate = true;
+  }
+
+  /**
+   * Read a normalised magnitude at the specified row and bin.
+   * What: Provides random access to CPU-side data for interaction handlers.
+   * Why: Enables features like click/hover to inspect underlying values.
+   * How: Computes the absolute index accounting for ring wrap-around and
+   * converts the stored value to a float in the range [0,1].
+   */
+  read(row: number, bin: number): number {
+    const { binCount, maxRows, format } = this.config;
+    if (row < 0 || row >= this.rowCount) throw new Error('Row out of range');
+    if (bin < 0 || bin >= binCount) throw new Error('Bin out of range');
+    const baseRow = (this.writeRow - this.rowCount + row + maxRows) % maxRows;
+    const index = baseRow * binCount + bin;
+    return format === 'UNORM8'
+      ? (this.data as Uint8Array)[index] / UINT8_MAX
+      : (this.data as Float32Array)[index];
   }
 
   /** Clear all stored rows and reset write pointers. */
@@ -217,13 +254,15 @@ export class SpectroRingBuffer {
 
   /**
    * Resize the buffer, discarding existing data.
-   * @param binCount - New number of frequency bins.
-   * @param maxRows - New maximum number of rows.
+   * @param binCount - New number of frequency bins; must be a finite positive integer.
+   * @param maxRows - New maximum number of rows; must be a finite positive integer.
+   * @throws When either parameter fails validation.
    */
   resize(binCount: number, maxRows: number): void {
     if (binCount === this.config.binCount && maxRows === this.config.maxRows) {
       return;
     }
+    this.validateDimensions(binCount, maxRows);
     this.data = this.createDataArray(binCount * maxRows);
     this.scratch = new Float32Array(binCount);
     this.texture.dispose();

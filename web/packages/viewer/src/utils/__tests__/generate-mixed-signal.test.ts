@@ -3,7 +3,7 @@
  * What: Validates that mixed signals are normalized and inputs are validated.
  * Why: Prevents clipping and ensures robustness for edge cases.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 const DataGenerator = await import('../data-generator');
 
@@ -60,5 +60,52 @@ describe('generateMixedSignal', () => {
         { type: 'music', amplitude: 1 }
       ])
     ).toThrow('length must be positive');
+  });
+
+  // Amplitudes greater than the maximum should be clamped to avoid scaling.
+  it('clamps amplitudes above allowed maximum', () => {
+    const generator = () => new Float32Array([0.5, -0.5, 0.5, -0.5]);
+    const result = generateMixedSignal(
+      TEST_LENGTH,
+      TEST_SAMPLE_RATE,
+      [{ type: 'music', amplitude: 2 }],
+      generator
+    );
+
+    const expected = [0.5, -0.5, 0.5, -0.5];
+    Array.from(result).forEach((v, i) => expect(v).toBeCloseTo(expected[i], 5));
+  });
+
+  // Negative amplitudes should trigger a validation error.
+  it('throws on negative amplitude', () => {
+    expect(() =>
+      generateMixedSignal(
+        TEST_LENGTH,
+        TEST_SAMPLE_RATE,
+        [{ type: 'music', amplitude: -0.1 }]
+      )
+    ).toThrow('source amplitude must be a finite, non-negative number');
+  });
+
+  // NaN amplitudes must be rejected to prevent undefined behavior.
+  it('throws on NaN amplitude', () => {
+    expect(() =>
+      generateMixedSignal(
+        TEST_LENGTH,
+        TEST_SAMPLE_RATE,
+        [{ type: 'music', amplitude: Number.NaN }]
+      )
+    ).toThrow('source amplitude must be a finite, non-negative number');
+  });
+
+  // Infinite amplitudes must also be rejected.
+  it('throws on infinite amplitude', () => {
+    expect(() =>
+      generateMixedSignal(
+        TEST_LENGTH,
+        TEST_SAMPLE_RATE,
+        [{ type: 'music', amplitude: Number.POSITIVE_INFINITY }]
+      )
+    ).toThrow('source amplitude must be a finite, non-negative number');
   });
 });

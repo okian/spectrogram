@@ -56,6 +56,26 @@ const GL_WEBGL1_NO_LINEAR = new FakeWebGL1Context({
 const BIN_COUNT = 3;
 /** Standard row capacity for buffers under test. */
 const MAX_ROWS = 4;
+/**
+ * Invalid dimension combinations exercised to validate constructor and resize checks.
+ * Each case specifies problematic values and the expected error fragment.
+ */
+const INVALID_DIMENSION_CASES: Array<{
+  binCount: number;
+  maxRows: number;
+  message: RegExp;
+}> = [
+  { binCount: 0, maxRows: 1, message: /binCount/ },
+  { binCount: -1, maxRows: 1, message: /binCount/ },
+  { binCount: Infinity, maxRows: 1, message: /binCount/ },
+  { binCount: NaN, maxRows: 1, message: /binCount/ },
+  { binCount: 1.5, maxRows: 1, message: /binCount/ },
+  { binCount: 1, maxRows: 0, message: /maxRows/ },
+  { binCount: 1, maxRows: -1, message: /maxRows/ },
+  { binCount: 1, maxRows: Infinity, message: /maxRows/ },
+  { binCount: 1, maxRows: NaN, message: /maxRows/ },
+  { binCount: 1, maxRows: 1.5, message: /maxRows/ },
+];
 
 /**
  * Verify R32F data is stored and typed correctly with WebGL2.
@@ -172,6 +192,23 @@ test('pushRow inserts rows sequentially', () => {
 });
 
 /**
+ * Ensure read returns normalised magnitudes at given coordinates.
+ */
+test('read retrieves bin value', () => {
+  const config: RingBufferConfig = {
+    binCount: BIN_COUNT,
+    maxRows: MAX_ROWS,
+    format: 'UNORM8',
+    linearFilter: false,
+  };
+  const buffer = new SpectroRingBuffer(GL_WEBGL1_NO_EXT, config);
+  buffer.pushRow(new Uint8Array([0, 128, 255]));
+  expect(buffer.read(0, 0)).toBe(0);
+  expect(buffer.read(0, 1)).toBeCloseTo(128 / 255);
+  expect(buffer.read(0, 2)).toBe(1);
+});
+
+/**
  * Verify old rows are overwritten when capacity wraps around.
  */
 test('pushRow wraps around after reaching capacity', () => {
@@ -237,4 +274,37 @@ test('resize reinitializes internal storage', () => {
   expect(buffer.getTexture().image.width).toBe(4);
   expect(buffer.getTexture().image.height).toBe(3);
 });
+
+/**
+ * Ensure constructor rejects invalid dimensions.
+ */
+test.each(INVALID_DIMENSION_CASES)(
+  'constructor throws for invalid dimensions %#',
+  ({ binCount, maxRows, message }) => {
+    const config: RingBufferConfig = {
+      binCount,
+      maxRows,
+      format: 'UNORM8',
+      linearFilter: false,
+    };
+    expect(() => new SpectroRingBuffer(GL_WEBGL1_NO_EXT, config)).toThrow(message);
+  }
+);
+
+/**
+ * Ensure resize rejects invalid dimensions.
+ */
+test.each(INVALID_DIMENSION_CASES)(
+  'resize throws for invalid dimensions %#',
+  ({ binCount, maxRows, message }) => {
+    const config: RingBufferConfig = {
+      binCount: BIN_COUNT,
+      maxRows: MAX_ROWS,
+      format: 'UNORM8',
+      linearFilter: false,
+    };
+    const buffer = new SpectroRingBuffer(GL_WEBGL1_NO_EXT, config);
+    expect(() => buffer.resize(binCount, maxRows)).toThrow(message);
+  }
+);
 

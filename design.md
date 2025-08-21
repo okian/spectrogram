@@ -102,13 +102,15 @@ export type SpectrogramProps = {
   className?: string;
   style?: React.CSSProperties;
   onReady?(api: SpectrogramAPI): void;
-  onHover?(p: { timeSec:number; freqHz:number; mag:number; magDb?:number; bin:number; row:number }): void;
-  onClick?(same: any): void;
+  onHover?(p: SpectroEvent): void;
+  onClick?(p: SpectroEvent): void;
 };
+
+// SpectroEvent delivers time, frequency and magnitude details for a single data point.
 
 Usage
 
-import { Spectrogram, SpectrogramAPI } from '@spectro/viewer';
+import { Spectrogram, SpectrogramAPI, type SpectroEvent } from '@spectro/viewer';
 
 function App() {
   const ref = React.useRef<SpectrogramAPI|null>(null);
@@ -125,8 +127,8 @@ function App() {
         showLegend: true
       }}
       onReady={(api) => { ref.current = api; }}
-      onHover={(p) => {/* ... */}}
-      onClick={(p) => {/* ... */}}
+      onHover={(p: SpectroEvent) => {/* ... */}}
+      onClick={(p: SpectroEvent) => {/* ... */}}
     />
   );
 }
