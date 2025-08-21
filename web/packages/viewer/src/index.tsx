@@ -4,7 +4,7 @@ import type { WebGLRenderer } from 'three';
 import { SpectroRingBuffer } from './core/ring-buffer';
 import { Heatmap2D } from './renderers/heatmap-2d';
 import { Legend } from './ui/legend';
-import { DEFAULT_BG } from './constants';
+import { DEFAULT_BG, DEFAULT_GENERATED_FPS } from './constants';
 import {
   generateRealisticSpectrogramData,
   generateSignalByType,
@@ -23,7 +23,7 @@ export { generateLUT, samplePalette, type Palette, type PaletteName, type RGBA }
 // Re-export data generator types
 export { type SignalType } from './utils/data-generator';
 // Re-export shared constants
-export { DEFAULT_BG } from './constants';
+export { DEFAULT_BG, DEFAULT_GENERATED_FPS } from './constants';
 
 /** View modes supported by the spectrogram viewer. */
 export type ViewMode = '2d-heatmap' | '2d-waterfall' | '3d-waterfall' | 'polar' | 'bars' | 'ridge' | 'waveform' | 'mel' | 'chroma';
@@ -370,29 +370,44 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
           frames = realisticFrames.map(f => ({ bins: f.bins, timestamp: f.timestamp }));
         } else if (dataType === 'music') {
           // Generate music signal
-            const musicSignal = generateMusicSignal(duration * DEFAULT_CONFIG.sampleRate, DEFAULT_CONFIG.sampleRate);
-            frames = await generateSTFTFrames(musicSignal, DEFAULT_CONFIG, frameCount);
-          } else if (dataType === 'mixed') {
-            // Generate mixed signal
-            const mixedSignal = generateMixedSignal(
-              duration * DEFAULT_CONFIG.sampleRate,
-              DEFAULT_CONFIG.sampleRate,
-              [
-              { type: 'music', amplitude: MIX_MUSIC_AMPLITUDE },
-              { type: 'speech', amplitude: MIX_SPEECH_AMPLITUDE },
-              { type: 'noise', amplitude: MIX_NOISE_AMPLITUDE }
-              ]
-            );
-            frames = await generateSTFTFrames(mixedSignal, DEFAULT_CONFIG, frameCount);
-          } else {
-            // Generate single signal type
-            const signal = generateSignalByType(
-              duration * DEFAULT_CONFIG.sampleRate,
-              DEFAULT_CONFIG.sampleRate,
-              dataType as SignalType
-            );
-            frames = await generateSTFTFrames(signal, DEFAULT_CONFIG, frameCount);
-          }
+          const musicSignal = generateMusicSignal(duration * DEFAULT_CONFIG.sampleRate, DEFAULT_CONFIG.sampleRate);
+          // Convert duration to frame count using DEFAULT_GENERATED_FPS
+          frames = await generateSTFTFrames(
+            musicSignal,
+            DEFAULT_CONFIG,
+            Math.floor(duration * DEFAULT_GENERATED_FPS)
+          );
+        } else if (dataType === 'mixed') {
+          // Generate mixed signal
+          const mixedSignal = generateMixedSignal(
+            duration * DEFAULT_CONFIG.sampleRate,
+            DEFAULT_CONFIG.sampleRate,
+            [
+              { type: 'music', amplitude: 0.6 },
+              { type: 'speech', amplitude: 0.4 },
+              { type: 'noise', amplitude: 0.2 }
+            ]
+          );
+          // Convert duration to frame count using DEFAULT_GENERATED_FPS
+          frames = await generateSTFTFrames(
+            mixedSignal,
+            DEFAULT_CONFIG,
+            Math.floor(duration * DEFAULT_GENERATED_FPS)
+          );
+        } else {
+          // Generate single signal type
+          const signal = generateSignalByType(
+            duration * DEFAULT_CONFIG.sampleRate,
+            DEFAULT_CONFIG.sampleRate,
+            dataType as SignalType
+          );
+          // Convert duration to frame count using DEFAULT_GENERATED_FPS
+          frames = await generateSTFTFrames(
+            signal,
+            DEFAULT_CONFIG,
+            Math.floor(duration * DEFAULT_GENERATED_FPS)
+          );
+        }
         
         // Push frames to ring buffer
         frames.forEach(frame => {
