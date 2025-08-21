@@ -45,6 +45,8 @@ const MIN_FREQ_START_HZ = 0;
 const MIN_FREQ_STEP_HZ = 1e-12;
 /** Default display time window in seconds. */
 const DEFAULT_TIME_WINDOW_SEC = 10;
+/** Default duration in seconds for synthetic data generation. */
+const DEFAULT_DATA_DURATION_SECONDS = 30;
 
 /**
  * Validate incoming spectrogram metadata and fail fast on invalid values.
@@ -157,7 +159,11 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
 }) => {
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const ringBufferRef = React.useRef<SpectroRingBuffer | null>(null);
-  const dataIntervalRef = React.useRef<number | null>(null);
+  /**
+   * Handle to the interval generating synthetic data.
+   * Why: typed as ReturnType of setInterval to support both browser and Node environments.
+   */
+  const dataIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const [currentConfig, setCurrentConfig] = React.useState<SpectroConfig>({
     view: '2d-heatmap',
     width: 800,
@@ -170,7 +176,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     showGrid: true,
     background: '#111',
     dataType: 'realistic',
-    dataDuration: 30,
+    dataDuration: DEFAULT_DATA_DURATION_SECONDS,
     autoGenerate: true,
     ...config
   });
@@ -265,7 +271,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
       if (!ringBufferRef.current) return;
 
       const dataType = type || currentConfig.dataType || 'realistic';
-      const duration = currentConfig.dataDuration ?? 30;
+      const duration = currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
       
       try {
         let frames: Array<{ bins: Float32Array; timestamp: number }> = [];
@@ -333,7 +339,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     // Set up periodic generation
     dataIntervalRef.current = setInterval(() => {
       apiRef.current.generateData();
-    }, (currentConfig.dataDuration ?? 30) * 1000);
+    }, (currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS) * 1000);
 
     return () => {
       if (dataIntervalRef.current) {

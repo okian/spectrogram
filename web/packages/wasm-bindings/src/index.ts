@@ -28,6 +28,12 @@ const WINDOW_TYPES = [
   'none'
 ] as const;
 
+/**
+ * Path to the wasm-bindgen generated JS glue relative to this module.
+ * Why: centralize the location to avoid fragile hard-coded paths.
+ */
+const WASM_PKG_JS_PATH = '../pkg/spectro_dsp.js';
+
 let wasmModule: WasmModule | null = null;
 let initPromise: Promise<WasmModule> | null = null;
 
@@ -40,18 +46,24 @@ export async function initWasm(): Promise<WasmModule> {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    // WASM loader lacks type declarations; ignore for type checking.
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    const mod = await import('../../../crates/dsp_core/pkg/spectro_dsp.js');
-    if (!mod?.default || typeof mod.default !== 'function') {
+    try {
+      // WASM loader lacks type declarations; ignore for type checking.
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore – wasm-pack generated module has no types.
+      const mod = await import(WASM_PKG_JS_PATH);
+      if (!mod?.default || typeof mod.default !== 'function') {
+        initPromise = null;
+        throw new Error('WASM module missing default initialization function');
+      }
+      await mod.default();
+      // After initialization the module functions are ready to use.
+      wasmModule = mod as unknown as WasmModule;
+      return wasmModule;
+    } catch (error) {
+      // Reset promise on failure to allow subsequent retries.
       initPromise = null;
-      throw new Error('WASM module missing default initialization function');
+      throw error;
     }
-    await mod.default();
-    // After initialization the module functions are ready to use.
-    wasmModule = mod as unknown as WasmModule;
-    return wasmModule;
   })();
 
   return initPromise;
