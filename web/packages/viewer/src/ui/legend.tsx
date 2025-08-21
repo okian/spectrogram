@@ -33,6 +33,67 @@ const LABEL_COLOR = '#fff';
 const LINE_WIDTH_PX = 1;
 /** Maximum value for an 8-bit color channel. */
 const COLOR_MAX = 255;
+/** Number of entries in a color lookup table. */
+const LUT_SIZE = 256;
+/** Number of bytes per RGBA color. */
+const BYTES_PER_COLOR = 4;
+/** Fully opaque alpha channel value. */
+const FULL_ALPHA = 255;
+/** Length in pixels of tick marks on the legend. */
+const TICK_LENGTH = 5;
+/** Count of dB labels displayed alongside the legend. */
+const LABEL_COUNT = 5;
+/** Width in pixels of the offscreen canvas used for gradient generation. */
+const OFFSCREEN_WIDTH = 1;
+/** Stroke width for borders and tick marks. */
+const STROKE_WIDTH = 1;
+/** Color used for legend border lines. */
+const BORDER_COLOR = '#666';
+/** Color used for tick marks and text. */
+const FOREGROUND_COLOR = '#fff';
+/** Font definition for legend labels. */
+const LABEL_FONT = '12px monospace';
+/** Horizontal gap between tick marks and labels. */
+const LABEL_SPACING = 3;
+/** Vertical offset to center labels on tick marks. */
+const LABEL_VERTICAL_OFFSET = 4;
+/** CSS border style applied to the canvas element. */
+const CANVAS_BORDER_STYLE = '1px solid #333';
+/** Default width of the legend in pixels. */
+const DEFAULT_WIDTH = 30;
+/** Default height of the legend in pixels. */
+const DEFAULT_HEIGHT = 200;
+
+/** Expected byte length of a full LUT. */
+const EXPECTED_LUT_BYTES = LUT_SIZE * BYTES_PER_COLOR;
+
+/**
+ * Build legend ImageData from a LUT.
+ * What: Generates vertical gradient pixel data using raw LUT bytes.
+ * Why: Avoids costly gradient color stops and preserves color fidelity.
+ * How: Copies LUT values into a 1x256 ImageData object, optionally reversing order.
+ */
+export function buildLegendImageData(lut: Uint8Array, reverse: boolean): ImageData {
+  if (lut.length !== EXPECTED_LUT_BYTES) {
+    throw new Error('Unexpected LUT byte length');
+  }
+
+  const imageData = new ImageData(1, LUT_SIZE);
+  const dest = imageData.data;
+
+  for (let i = 0; i < LUT_SIZE; i++) {
+    const y = LUT_SIZE - 1 - i;
+    const colorIndex = reverse ? LUT_SIZE - 1 - i : i;
+    const srcOffset = colorIndex * BYTES_PER_COLOR;
+    const destOffset = y * BYTES_PER_COLOR;
+    dest[destOffset] = lut[srcOffset];
+    dest[destOffset + 1] = lut[srcOffset + 1];
+    dest[destOffset + 2] = lut[srcOffset + 2];
+    dest[destOffset + 3] = FULL_ALPHA;
+  }
+
+  return imageData;
+}
 
 /** Props for the legend component. */
 interface LegendProps {
@@ -83,6 +144,13 @@ export const Legend: React.FC<LegendProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    if (width <= 0 || height <= 0) {
+      throw new Error('Legend dimensions must be positive');
+    }
+    if (dbCeiling <= dbFloor) {
+      throw new Error('dbCeiling must exceed dbFloor');
+    }
+
     // Set canvas size
     canvas.width = width;
     canvas.height = height;
@@ -104,10 +172,27 @@ export const Legend: React.FC<LegendProps> = ({
         `rgb(${r * COLOR_MAX}, ${g * COLOR_MAX}, ${b * COLOR_MAX})`
       );
     }
+    const offscreen = document.createElement('canvas');
+    offscreen.width = OFFSCREEN_WIDTH;
+    offscreen.height = LUT_SIZE;
+    const offCtx = offscreen.getContext('2d');
+    if (!offCtx) return;
 
-    // Fill gradient
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
+    const imageData = buildLegendImageData(lut, paletteReverse);
+    offCtx.putImageData(imageData, 0, 0);
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      offscreen,
+      0,
+      0,
+      OFFSCREEN_WIDTH,
+      LUT_SIZE,
+      0,
+      0,
+      width,
+      height
+    );
 
     // Add border
     ctx.strokeStyle = STROKE_COLOR;
@@ -130,6 +215,7 @@ export const Legend: React.FC<LegendProps> = ({
       ctx.beginPath();
       ctx.moveTo(width, y);
       ctx.lineTo(width + TICK_LENGTH_PX, y);
+
       ctx.stroke();
 
       // Draw label
@@ -147,7 +233,7 @@ export const Legend: React.FC<LegendProps> = ({
         ref={canvasRef}
         style={{
           display: 'block',
-          border: '1px solid #333'
+          border: CANVAS_BORDER_STYLE
         }}
       />
     </div>

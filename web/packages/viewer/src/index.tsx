@@ -57,6 +57,38 @@ const DEFAULT_BIN_COUNT = 1025;
 const DEFAULT_MAX_ROWS = 512;
 
 /**
+ * Synthetic data frame rate in frames per second.
+ * What: Determines temporal resolution when generating demo STFT frames.
+ * Why: Keeps generation inexpensive while still showing motion.
+ * How: Multiply duration by this rate to compute total frame count.
+ */
+const SYNTHETIC_FRAME_RATE = 10;
+
+/**
+ * Amplitude of the music component in mixed demo signals.
+ * What: Scales music contribution when synthesizing a composite stream.
+ * Why: Emphasizes musical content without overpowering speech or noise.
+ * How: Chosen empirically as 0.6 to balance clarity and headroom.
+ */
+const MIX_MUSIC_AMPLITUDE = 0.6;
+
+/**
+ * Amplitude of the speech component in mixed demo signals.
+ * What: Controls speech prominence in the synthetic blend.
+ * Why: Keeps narration audible yet secondary to music.
+ * How: Set to 0.4 so speech remains clear alongside other elements.
+ */
+const MIX_SPEECH_AMPLITUDE = 0.4;
+
+/**
+ * Amplitude of the noise component in mixed demo signals.
+ * What: Introduces background noise for realism.
+ * Why: Simulates typical environmental noise levels without distraction.
+ * How: Fixed at 0.2 to provide subtle ambience.
+ */
+const MIX_NOISE_AMPLITUDE = 0.2;
+
+/**
  * Validate incoming spectrogram metadata and fail fast on invalid values.
  * What: Ensures the stream configuration is sane before allocating GPU memory.
  * Why: Prevents subtle bugs or crashes stemming from impossible parameters.
@@ -313,13 +345,21 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     generateData: async (type) => {
       if (!ringBufferRef.current) return;
 
-      const dataType = type || currentConfig.dataType || 'realistic';
-      const duration = currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
-      
-      try {
-        let frames: Array<{ bins: Float32Array; timestamp: number }> = [];
-        
-        if (dataType === 'realistic') {
+        const dataType = type || currentConfig.dataType || 'realistic';
+        const duration = currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
+
+        // Fail fast on nonsensical durations to avoid wasted work.
+        if (!Number.isFinite(duration) || duration <= 0) {
+          throw new Error('Invalid duration');
+        }
+
+        // Total STFT frames derived from duration and synthetic frame rate.
+        const frameCount = Math.floor(duration * SYNTHETIC_FRAME_RATE);
+
+        try {
+          let frames: Array<{ bins: Float32Array; timestamp: number }> = [];
+
+          if (dataType === 'realistic') {
           // Generate varied realistic data
           const realisticFrames = await generateRealisticSpectrogramData(
             DEFAULT_CONFIG,
@@ -329,29 +369,29 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
           frames = realisticFrames.map(f => ({ bins: f.bins, timestamp: f.timestamp }));
         } else if (dataType === 'music') {
           // Generate music signal
-          const musicSignal = generateMusicSignal(duration * DEFAULT_CONFIG.sampleRate, DEFAULT_CONFIG.sampleRate);
-          frames = await generateSTFTFrames(musicSignal, DEFAULT_CONFIG, Math.floor(duration * 10));
-        } else if (dataType === 'mixed') {
-          // Generate mixed signal
-          const mixedSignal = generateMixedSignal(
-            duration * DEFAULT_CONFIG.sampleRate,
-            DEFAULT_CONFIG.sampleRate,
-            [
-              { type: 'music', amplitude: 0.6 },
-              { type: 'speech', amplitude: 0.4 },
-              { type: 'noise', amplitude: 0.2 }
-            ]
-          );
-          frames = await generateSTFTFrames(mixedSignal, DEFAULT_CONFIG, Math.floor(duration * 10));
-        } else {
-          // Generate single signal type
-          const signal = generateSignalByType(
-            duration * DEFAULT_CONFIG.sampleRate,
-            DEFAULT_CONFIG.sampleRate,
-            dataType as SignalType
-          );
-          frames = await generateSTFTFrames(signal, DEFAULT_CONFIG, Math.floor(duration * 10));
-        }
+            const musicSignal = generateMusicSignal(duration * DEFAULT_CONFIG.sampleRate, DEFAULT_CONFIG.sampleRate);
+            frames = await generateSTFTFrames(musicSignal, DEFAULT_CONFIG, frameCount);
+          } else if (dataType === 'mixed') {
+            // Generate mixed signal
+            const mixedSignal = generateMixedSignal(
+              duration * DEFAULT_CONFIG.sampleRate,
+              DEFAULT_CONFIG.sampleRate,
+              [
+              { type: 'music', amplitude: MIX_MUSIC_AMPLITUDE },
+              { type: 'speech', amplitude: MIX_SPEECH_AMPLITUDE },
+              { type: 'noise', amplitude: MIX_NOISE_AMPLITUDE }
+              ]
+            );
+            frames = await generateSTFTFrames(mixedSignal, DEFAULT_CONFIG, frameCount);
+          } else {
+            // Generate single signal type
+            const signal = generateSignalByType(
+              duration * DEFAULT_CONFIG.sampleRate,
+              DEFAULT_CONFIG.sampleRate,
+              dataType as SignalType
+            );
+            frames = await generateSTFTFrames(signal, DEFAULT_CONFIG, frameCount);
+          }
         
         // Push frames to ring buffer
         frames.forEach(frame => {
