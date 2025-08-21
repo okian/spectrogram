@@ -1,6 +1,28 @@
 use rustfft::{num_complex::Complex32, FftPlanner};
-use std::f32::consts::PI;
+use std::{
+    f32::consts::PI,
+    sync::{Mutex, OnceLock},
+};
 use wasm_bindgen::prelude::*;
+
+/// Lazily initialized global planner for FFT computations.
+///
+/// # What
+/// Shares a single `FftPlanner` instance across calls.
+///
+/// # Why
+/// Creating a planner allocates and caches FFT algorithms. Reusing a single
+/// instance avoids repeated allocations and planning overhead.
+static FFT_PLANNER: OnceLock<Mutex<FftPlanner<f32>>> = OnceLock::new();
+
+/// Retrieve the global FFT planner, initializing it on first use.
+///
+/// # How
+/// Wraps the planner in a `Mutex` for interior mutability because planning
+/// requires mutable access to cache FFT algorithms by size.
+fn planner() -> &'static Mutex<FftPlanner<f32>> {
+    FFT_PLANNER.get_or_init(|| Mutex::new(FftPlanner::new()))
+}
 
 /// Full circle constant used in window and FFT calculations.
 const TWO_PI: f32 = 2.0 * PI;
@@ -55,10 +77,13 @@ pub fn fft_real(input: &[f32]) -> Vec<f32> {
     // Convert real input into complex numbers required by `rustfft`.
     let mut buffer: Vec<Complex32> = input.iter().map(|&x| Complex32::new(x, 0.0)).collect();
 
-    // Plan and execute the FFT. Planner internally caches instances by size.
-    FftPlanner::<f32>::new()
-        .plan_fft_forward(n)
-        .process(&mut buffer);
+    // Plan and execute the FFT using the shared planner.
+    // Acquire planner lock only for planning to minimize contention.
+    let fft = {
+        let mut planner = planner().lock().expect("planner lock");
+        planner.plan_fft_forward(n)
+    };
+    fft.process(&mut buffer);
 
     // Flatten complex results into interleaved real/imaginary pairs.
     let mut output = Vec::with_capacity(2 * n);
@@ -150,6 +175,9 @@ mod tests {
     /// Size of the test signal used for performance comparisons.
     const PERF_SIZE: usize = 512;
 
+    /// Number of iterations to use when benchmarking planner reuse.
+    const BENCH_RUNS: usize = 100;
+
     /// Naive \(O(n^2)\) FFT used as a correctness reference.
     fn reference_fft(input: &[f32]) -> Vec<f32> {
         let n = input.len();
@@ -168,6 +196,22 @@ mod tests {
         output
     }
 
+    /// Compute FFT using a fresh planner each call. Used for benchmarking the
+    /// benefits of planner reuse.
+    fn fft_real_uncached(input: &[f32]) -> Vec<f32> {
+        let n = input.len();
+        let mut buffer: Vec<Complex32> = input.iter().map(|&x| Complex32::new(x, 0.0)).collect();
+        FftPlanner::<f32>::new()
+            .plan_fft_forward(n)
+            .process(&mut buffer);
+        let mut output = Vec::with_capacity(2 * n);
+        for c in buffer {
+            output.push(c.re);
+            output.push(c.im);
+        }
+        output
+    }
+
     /// Ensure the optimized FFT matches the reference implementation.
     #[test]
     fn fft_matches_reference() {
@@ -175,7 +219,7 @@ mod tests {
         let expected = reference_fft(&data);
         let result = fft_real(&data);
         for (a, b) in result.iter().zip(expected.iter()) {
-            assert!((a - b).abs() < TOLERANCE, "{} vs {}", a, b);
+            assert!((a - b).abs() < TOLERANCE, "{a} vs {b}");
         }
     }
 
@@ -193,9 +237,37 @@ mod tests {
 
         assert!(
             opt_time < ref_time,
-            "optimized {:?} >= reference {:?}",
-            opt_time,
-            ref_time
+            "optimized {opt_time:?} >= reference {ref_time:?}"
+        );
+    }
+
+    /// Demonstrate that reusing a planner is faster than creating a new one
+    /// for each FFT invocation.
+    #[test]
+    fn cached_planner_is_faster() {
+        let data: Vec<f32> = (0..PERF_SIZE).map(|i| (i as f32).cos()).collect();
+
+        // Warm up both implementations to populate caches.
+        let _ = fft_real(&data);
+        let _ = fft_real_uncached(&data);
+
+        // Time repeated FFTs using the cached planner.
+        let start = Instant::now();
+        for _ in 0..BENCH_RUNS {
+            std::hint::black_box(fft_real(&data));
+        }
+        let cached_time = start.elapsed();
+
+        // Time repeated FFTs using a fresh planner each iteration.
+        let start = Instant::now();
+        for _ in 0..BENCH_RUNS {
+            std::hint::black_box(fft_real_uncached(&data));
+        }
+        let uncached_time = start.elapsed();
+
+        assert!(
+            cached_time < uncached_time,
+            "cached planner {cached_time:?} >= new planner {uncached_time:?}"
         );
     }
 }
