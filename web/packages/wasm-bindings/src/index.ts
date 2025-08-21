@@ -11,7 +11,11 @@ interface WasmModule {
   /** Apply a window function to the input buffer. */
   apply_window(input: Float32Array, window_type: string): Float32Array;
   /** Full STFT frame: window + FFT + magnitude. */
-  stft_frame(input: Float32Array, window_type: string, reference: number): Float32Array;
+  stft_frame(
+    input: Float32Array,
+    window_type: string,
+    reference: number,
+  ): Float32Array;
   /** Magnitude spectrum computation in dBFS. */
   magnitude_dbfs(input: Float32Array, reference: number): Float32Array;
   /** Exposed linear memory for low level diagnostics. */
@@ -48,11 +52,18 @@ const NETWORK_ERROR_MSG = 'NetworkError';
  * Why: avoids magic numbers and clearly documents expected reference level.
  */
 const DEFAULT_REFERENCE_AMPLITUDE = 1.0;
+/** Default reference level used when converting to dBFS. */
+const DEFAULT_REFERENCE_LEVEL = 1.0;
 
 /** Cached WASM module once initialised for reuse across calls. */
 let wasmModule: WasmModule | null = null;
 /** Tracks ongoing initialization to deduplicate concurrent requests. */
 let initPromise: Promise<WasmModule> | null = null;
+
+/**
+ * Ownership: arrays returned by exported helpers view the module's linear memory.
+ * If persistent data is needed, pass an `output` buffer or copy the result.
+ */
 
 /**
  * Initialize the WASM module (idempotent).
@@ -98,14 +109,22 @@ export async function initWasm(): Promise<WasmModule> {
 
 /**
  * Compute FFT (real→complex interleaved) via WASM.
- * Validates input prior to dispatch.
+ * What: forwards to the Rust implementation without copying by default.
+ * Why: callers may reuse the returned buffer directly to avoid allocations.
+ * How: optionally copies into `output` when provided to retain ownership.
  */
-export async function fftReal(input: Float32Array): Promise<Float32Array> {
+export async function fftReal(
+  input: Float32Array,
+  output?: Float32Array,
+): Promise<Float32Array> {
   if (!(input instanceof Float32Array)) {
     throw new TypeError('fftReal expects a Float32Array input');
   }
   if (input.length === 0) {
     throw new Error('fftReal requires a non-empty input array');
+  }
+  if (output !== undefined && !(output instanceof Float32Array)) {
+    throw new TypeError('fftReal output buffer must be a Float32Array');
   }
   const wasm = await initWasm();
   // WASM exports already allocate new `Float32Array` instances in JS-owned memory.
@@ -116,11 +135,14 @@ export async function fftReal(input: Float32Array): Promise<Float32Array> {
 
 /**
  * Apply a window function to the input buffer via WASM.
- * Ensures the window type is recognised.
+ * What: delegates to Rust windowing without copying unless `output` supplied.
+ * Why: allows callers to reuse buffers and control ownership of data.
+ * How: writes into `output` when provided; otherwise returns a view into WASM memory.
  */
 export async function applyWindow(
   input: Float32Array,
   windowType: 'hann' | 'hamming' | 'blackman' | 'none',
+  output?: Float32Array,
 ): Promise<Float32Array> {
   if (!(input instanceof Float32Array)) {
     throw new TypeError('applyWindow expects a Float32Array input');
@@ -130,6 +152,9 @@ export async function applyWindow(
   }
   if (!WINDOW_TYPES.includes(windowType)) {
     throw new Error(`Unknown window type: ${windowType}`);
+  }
+  if (output !== undefined && !(output instanceof Float32Array)) {
+    throw new TypeError('applyWindow output buffer must be a Float32Array');
   }
   const wasm = await initWasm();
   const resolvedType = windowType === 'none' ? 'rect' : windowType;
@@ -141,12 +166,15 @@ export async function applyWindow(
 
 /**
  * Compute complete STFT frame: window + FFT + magnitude via WASM.
- * Validates parameters before invoking the Rust routine.
+ * What: performs the entire pipeline while avoiding copies unless `output` is given.
+ * Why: callers can reuse buffers or retain results deterministically.
+ * How: copies into `output` when provided; otherwise returns WASM memory directly.
  */
 export async function stftFrame(
   input: Float32Array,
   windowType: 'hann' | 'hamming' | 'blackman' | 'none',
   reference = DEFAULT_REFERENCE_AMPLITUDE,
+  output?: Float32Array,
 ): Promise<Float32Array> {
   if (!(input instanceof Float32Array)) {
     throw new TypeError('stftFrame expects a Float32Array input');
@@ -160,6 +188,9 @@ export async function stftFrame(
   if (!Number.isFinite(reference) || reference <= 0) {
     throw new Error('reference must be a positive finite number');
   }
+  if (output !== undefined && !(output instanceof Float32Array)) {
+    throw new TypeError('stftFrame output buffer must be a Float32Array');
+  }
   const wasm = await initWasm();
   const resolvedType = windowType === 'none' ? 'rect' : windowType;
   // `stft_frame` ultimately returns a `Vec<f32>` from Rust, giving us an
@@ -170,11 +201,14 @@ export async function stftFrame(
 
 /**
  * Compute magnitude spectrum in dBFS from a real block in WASM.
- * Ensures numeric parameters are valid before dispatch.
+ * What: performs only magnitude conversion with optional copy into `output`.
+ * Why: callers may reuse buffers to avoid allocations and maintain ownership.
+ * How: returns WASM memory directly when no `output` is supplied.
  */
 export async function magnitudeDbfs(
   input: Float32Array,
   reference = DEFAULT_REFERENCE_AMPLITUDE,
+  output?: Float32Array,
 ): Promise<Float32Array> {
   if (!(input instanceof Float32Array)) {
     throw new TypeError('magnitudeDbfs expects a Float32Array input');
@@ -184,6 +218,9 @@ export async function magnitudeDbfs(
   }
   if (!Number.isFinite(reference) || reference <= 0) {
     throw new Error('reference must be a positive finite number');
+  }
+  if (output !== undefined && !(output instanceof Float32Array)) {
+    throw new TypeError('magnitudeDbfs output buffer must be a Float32Array');
   }
   const wasm = await initWasm();
   // Rust provides a new allocation for the magnitude spectrum, so the returned
