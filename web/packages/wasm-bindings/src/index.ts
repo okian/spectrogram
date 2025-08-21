@@ -58,10 +58,10 @@ export async function initWasm(): Promise<WasmModule> {
 
   initPromise = (async () => {
     try {
-      // WASM loader lacks type declarations; ignore for type checking.
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore – wasm-pack generated module has no types.
-      const mod = await import(WASM_PKG_JS_PATH);
+      // Dynamically import the wasm-bindgen module with explicit typing.
+      // What: cast the resolved module to the generated spectro_dsp types.
+      // Why: the import path is computed at runtime so TypeScript cannot infer it.
+      const mod = (await import(WASM_PKG_JS_PATH)) as typeof import('../pkg/spectro_dsp.js');
       if (!mod?.default || typeof mod.default !== 'function') {
         initPromise = null;
         throw new Error('WASM module missing default initialization function');
