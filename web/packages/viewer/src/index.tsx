@@ -99,6 +99,20 @@ export interface SpectroFrame {
   bins: Float32Array | Uint16Array | Uint8Array;
 }
 
+/**
+ * Data payload describing a single spectrogram point interaction.
+ * What: Encapsulates time, frequency, and magnitude information for user events.
+ * Why: Provides a strongly typed contract for hover and click callbacks.
+ */
+export interface SpectroEvent {
+  timeSec: number;
+  freqHz: number;
+  mag: number;
+  magDb?: number;
+  bin: number;
+  row: number;
+}
+
 /** Declarative viewer configuration. */
 export interface SpectroConfig {
   view?: ViewMode;
@@ -149,8 +163,8 @@ export type SpectrogramProps = {
   className?: string;
   style?: React.CSSProperties;
   onReady?(api: SpectrogramAPI): void;
-  onHover?(p: { timeSec: number; freqHz: number; mag: number; magDb?: number; bin: number; row: number }): void;
-  onClick?(p: any): void;
+  onHover?(p: SpectroEvent): void;
+  onClick?(p: SpectroEvent): void;
 };
 
 /**
@@ -173,6 +187,8 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   const glRef = React.useRef<WebGLRenderingContext | null>(null);
   /** Shared ring buffer instance backing the visualization. */
   const ringBufferRef = React.useRef<SpectroRingBuffer | null>(null);
+  /** Last metadata received via setMeta; used for coordinate mapping. */
+  const metaRef = React.useRef<SpectroMeta | null>(null);
   /**
    * Handle to the interval generating synthetic data.
    * Why: typed as ReturnType of setInterval to support both browser and Node environments.
@@ -251,7 +267,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     setMeta(meta) {
       // Validate metadata before applying changes
       validateMeta(meta);
-
+      metaRef.current = meta;
       const ring = ringBufferRef.current;
       if (!ring) throw new Error('Ring buffer not initialized');
 
@@ -392,6 +408,48 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     };
   }, [currentConfig.autoGenerate, currentConfig.dataDuration]);
 
+  /**
+   * Handle user clicks on the spectrogram display.
+   * What: Maps screen coordinates to time/frequency and reports magnitude.
+   * Why: Exposes precise data points for interactive analysis.
+   * How: Uses current metadata and ring buffer contents to derive values.
+   */
+  const handleClick = React.useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!onClick) return;
+      const ring = ringBufferRef.current;
+      const meta = metaRef.current;
+      if (!ring || !meta) return;
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
+      const stats = ring.getStats();
+      if (stats.rowCount === 0) return;
+
+      const xNorm = (e.clientX - rect.left) / rect.width;
+      const yNorm = (e.clientY - rect.top) / rect.height;
+
+      const row = Math.min(
+        stats.rowCount - 1,
+        Math.max(0, Math.floor(xNorm * stats.rowCount))
+      );
+      const bin = Math.min(
+        stats.binCount - 1,
+        Math.max(0, Math.floor((1 - yNorm) * stats.binCount))
+      );
+
+      const mag = ring.read(row, bin);
+      const timeSec = (row * meta.hopSize) / meta.sampleRateHz;
+      const freqHz = meta.freqStartHz + bin * meta.freqStepHz;
+      const payload: SpectroEvent = { timeSec, freqHz, mag, bin, row };
+      if (meta.scale === 'dbfs') payload.magDb = mag;
+
+      onClick(payload);
+    },
+    [onClick]
+  );
+
   React.useEffect(() => {
     if (ready && onReady) onReady(apiRef.current);
   }, [ready, onReady]);
@@ -401,14 +459,15 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   return (
     <div
       ref={canvasRef}
-      className={className} 
-      style={{ 
-        width, 
-        height, 
-        background, 
+      className={className}
+      style={{
+        width,
+        height,
+        background,
         position: 'relative',
-        ...style 
+        ...style
       }}
+      onClick={handleClick}
     >
       {/* 3D Canvas */}
       <Canvas

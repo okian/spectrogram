@@ -5,7 +5,7 @@ import { textureSizeFromRingBuffer } from '../heatmap-2d';
 import { SpectroRingBuffer } from '../../core/ring-buffer';
 
 // Mock WASM bindings to avoid requiring compiled artifacts during tests
-vi.mock('@spectro/wasm-bindings', () => ({}), { virtual: true });
+vi.mock('@spectro/wasm-bindings', () => ({}));
 
 /**
  * Helper to create a ring buffer of the specified dimensions.

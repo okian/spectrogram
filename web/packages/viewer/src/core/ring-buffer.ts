@@ -173,7 +173,7 @@ export class SpectroRingBuffer {
       uploadData = floats;
     }
 
-    const gl = this.gl;
+    const gl = this.gl as WebGLRenderingContext & { RED: number };
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.texSubImage2D(
       gl.TEXTURE_2D,
@@ -190,6 +190,24 @@ export class SpectroRingBuffer {
     this.writeRow = (this.writeRow + 1) % maxRows;
     this.rowCount = Math.min(this.rowCount + 1, maxRows);
     this.texture.needsUpdate = true;
+  }
+
+  /**
+   * Read a normalised magnitude at the specified row and bin.
+   * What: Provides random access to CPU-side data for interaction handlers.
+   * Why: Enables features like click/hover to inspect underlying values.
+   * How: Computes the absolute index accounting for ring wrap-around and
+   * converts the stored value to a float in the range [0,1].
+   */
+  read(row: number, bin: number): number {
+    const { binCount, maxRows, format } = this.config;
+    if (row < 0 || row >= this.rowCount) throw new Error('Row out of range');
+    if (bin < 0 || bin >= binCount) throw new Error('Bin out of range');
+    const baseRow = (this.writeRow - this.rowCount + row + maxRows) % maxRows;
+    const index = baseRow * binCount + bin;
+    return format === 'UNORM8'
+      ? (this.data as Uint8Array)[index] / UINT8_MAX
+      : (this.data as Float32Array)[index];
   }
 
   /** Clear all stored rows and reset write pointers. */
