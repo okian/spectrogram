@@ -7,6 +7,68 @@
 import * as React from 'react';
 import { generateLUT, type Palette } from '../palettes';
 
+/** Number of entries in a color lookup table. */
+const LUT_SIZE = 256;
+/** Number of bytes per RGBA color. */
+const BYTES_PER_COLOR = 4;
+/** Fully opaque alpha channel value. */
+const FULL_ALPHA = 255;
+/** Length in pixels of tick marks on the legend. */
+const TICK_LENGTH = 5;
+/** Count of dB labels displayed alongside the legend. */
+const LABEL_COUNT = 5;
+/** Width in pixels of the offscreen canvas used for gradient generation. */
+const OFFSCREEN_WIDTH = 1;
+/** Stroke width for borders and tick marks. */
+const STROKE_WIDTH = 1;
+/** Color used for legend border lines. */
+const BORDER_COLOR = '#666';
+/** Color used for tick marks and text. */
+const FOREGROUND_COLOR = '#fff';
+/** Font definition for legend labels. */
+const LABEL_FONT = '12px monospace';
+/** Horizontal gap between tick marks and labels. */
+const LABEL_SPACING = 3;
+/** Vertical offset to center labels on tick marks. */
+const LABEL_VERTICAL_OFFSET = 4;
+/** CSS border style applied to the canvas element. */
+const CANVAS_BORDER_STYLE = '1px solid #333';
+/** Default width of the legend in pixels. */
+const DEFAULT_WIDTH = 30;
+/** Default height of the legend in pixels. */
+const DEFAULT_HEIGHT = 200;
+
+/** Expected byte length of a full LUT. */
+const EXPECTED_LUT_BYTES = LUT_SIZE * BYTES_PER_COLOR;
+
+/**
+ * Build legend ImageData from a LUT.
+ * What: Generates vertical gradient pixel data using raw LUT bytes.
+ * Why: Avoids costly gradient color stops and preserves color fidelity.
+ * How: Copies LUT values into a 1x256 ImageData object, optionally reversing order.
+ */
+export function buildLegendImageData(lut: Uint8Array, reverse: boolean): ImageData {
+  if (lut.length !== EXPECTED_LUT_BYTES) {
+    throw new Error('Unexpected LUT byte length');
+  }
+
+  const imageData = new ImageData(1, LUT_SIZE);
+  const dest = imageData.data;
+
+  for (let i = 0; i < LUT_SIZE; i++) {
+    const y = LUT_SIZE - 1 - i;
+    const colorIndex = reverse ? LUT_SIZE - 1 - i : i;
+    const srcOffset = colorIndex * BYTES_PER_COLOR;
+    const destOffset = y * BYTES_PER_COLOR;
+    dest[destOffset] = lut[srcOffset];
+    dest[destOffset + 1] = lut[srcOffset + 1];
+    dest[destOffset + 2] = lut[srcOffset + 2];
+    dest[destOffset + 3] = FULL_ALPHA;
+  }
+
+  return imageData;
+}
+
 /** Props for the legend component. */
 interface LegendProps {
   /** Color palette for the legend. */
@@ -35,8 +97,8 @@ export const Legend: React.FC<LegendProps> = ({
   paletteReverse = false,
   dbFloor,
   dbCeiling,
-  width = 30,
-  height = 200,
+  width = DEFAULT_WIDTH,
+  height = DEFAULT_HEIGHT,
   className
 }) => {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -49,55 +111,70 @@ export const Legend: React.FC<LegendProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    if (width <= 0 || height <= 0) {
+      throw new Error('Legend dimensions must be positive');
+    }
+    if (dbCeiling <= dbFloor) {
+      throw new Error('dbCeiling must exceed dbFloor');
+    }
+
     // Set canvas size
     canvas.width = width;
     canvas.height = height;
 
     // Generate color LUT
     const lut = generateLUT(palette);
-    const gradient = ctx.createLinearGradient(0, height, 0, 0);
+    const offscreen = document.createElement('canvas');
+    offscreen.width = OFFSCREEN_WIDTH;
+    offscreen.height = LUT_SIZE;
+    const offCtx = offscreen.getContext('2d');
+    if (!offCtx) return;
 
-    // Create gradient stops
-    for (let i = 0; i < 256; i++) {
-      const t = i / 255;
-      const colorIndex = paletteReverse ? 255 - i : i;
-      const r = lut[colorIndex * 4] / 255;
-      const g = lut[colorIndex * 4 + 1] / 255;
-      const b = lut[colorIndex * 4 + 2] / 255;
-      
-      gradient.addColorStop(t, `rgb(${r * 255}, ${g * 255}, ${b * 255})`);
-    }
+    const imageData = buildLegendImageData(lut, paletteReverse);
+    offCtx.putImageData(imageData, 0, 0);
 
-    // Fill gradient
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      offscreen,
+      0,
+      0,
+      OFFSCREEN_WIDTH,
+      LUT_SIZE,
+      0,
+      0,
+      width,
+      height
+    );
 
     // Add border
-    ctx.strokeStyle = '#666';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = BORDER_COLOR;
+    ctx.lineWidth = STROKE_WIDTH;
     ctx.strokeRect(0, 0, width, height);
 
     // Add dB labels
-    ctx.fillStyle = '#fff';
-    ctx.font = '12px monospace';
+    ctx.fillStyle = FOREGROUND_COLOR;
+    ctx.font = LABEL_FONT;
     ctx.textAlign = 'left';
-    
-    const labelCount = 5;
-    for (let i = 0; i <= labelCount; i++) {
-      const t = i / labelCount;
+
+    for (let i = 0; i <= LABEL_COUNT; i++) {
+      const t = i / LABEL_COUNT;
       const db = dbFloor + (dbCeiling - dbFloor) * t;
       const y = height - t * height;
-      
+
       // Draw tick mark
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = FOREGROUND_COLOR;
+      ctx.lineWidth = STROKE_WIDTH;
       ctx.beginPath();
       ctx.moveTo(width, y);
-      ctx.lineTo(width + 5, y);
+      ctx.lineTo(width + TICK_LENGTH, y);
       ctx.stroke();
-      
+
       // Draw label
-      ctx.fillText(`${db.toFixed(0)} dB`, width + 8, y + 4);
+      ctx.fillText(
+        `${db.toFixed(0)} dB`,
+        width + TICK_LENGTH + LABEL_SPACING,
+        y + LABEL_VERTICAL_OFFSET
+      );
     }
   }, [palette, paletteReverse, dbFloor, dbCeiling, width, height]);
 
@@ -107,7 +184,7 @@ export const Legend: React.FC<LegendProps> = ({
         ref={canvasRef}
         style={{
           display: 'block',
-          border: '1px solid #333'
+          border: CANVAS_BORDER_STYLE
         }}
       />
     </div>
