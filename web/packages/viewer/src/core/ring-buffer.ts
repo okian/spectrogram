@@ -68,7 +68,7 @@ export class SpectroRingBuffer {
   private createDataArray(size: number): Float32Array | Uint8Array {
     return this.config.format === 'UNORM8'
       ? new Uint8Array(size)
-      : new Float32Array(size); // R32F and R16F both use float32 storage.
+      : new Float32Array(size); // For CPU-side storage, both R32F and R16F use Float32Array. (R16F is stored as half-float on the GPU.)
   }
 
   /**
