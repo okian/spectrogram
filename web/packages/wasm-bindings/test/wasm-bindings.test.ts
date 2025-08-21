@@ -31,8 +31,8 @@ const PKG_DIR_RELATIVE = '../pkg';
 // Allow wasm-pack's browser loader to fetch local files in Node.
 /** Preserve original fetch implementation for cleanup. */
 const realFetch = globalThis.fetch;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-;(globalThis.fetch as any) = async (input: any, init?: any): Promise<Response> => {
+/** Fetch implementation that serves `file://` URLs from disk. */
+const fileFetch: typeof fetch = async (input: any, init?: any): Promise<Response> => {
   if (typeof input === 'string' && input.startsWith('file://')) {
     const data = await readFile(fileURLToPath(input));
     return new Response(data, { headers: { 'Content-Type': WASM_CONTENT_TYPE } });
@@ -43,6 +43,8 @@ const realFetch = globalThis.fetch;
   }
   return realFetch(input, init);
 };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(globalThis.fetch as any) = fileFetch as any;
 
 /** Flag indicating whether streaming compilation was exercised. */
 let streamingUsed = false;
@@ -82,6 +84,23 @@ test('initWasm throws clear error when WASM bundle is missing', async () => {
 });
 
 /**
+ * Ensure initWasm surfaces a helpful message when network fetch fails.
+ */
+test('initWasm throws clear error on network failure', async () => {
+  // Replace fetch with a stub that simulates a network failure.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const failingFetch: typeof fetch = async (): Promise<Response> => {
+    throw new TypeError('Failed to fetch');
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis.fetch as any) = failingFetch as any;
+  try {
+    await assert.rejects(initWasm(), { message: /WASM bundle not found/ });
+  } finally {
+    // Restore the file-backed fetch for subsequent tests.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis.fetch as any) = fileFetch as any;
+  }
  * Confirm wasm-pack output exists so consumers aren't missing runtime files.
  */
 test('pkg directory exists after build step', async () => {
