@@ -6,14 +6,15 @@ import { Heatmap2D } from './renderers/heatmap-2d';
 import { Legend } from './ui/legend';
 import { DEFAULT_BG } from './constants';
 import {
-  generateRealisticSpectrogramData, 
-  generateSignalByType, 
+  generateRealisticSpectrogramData,
+  generateSignalByType,
   generateMusicSignal,
   generateMixedSignal,
   generateSTFTFrames,
   type SignalType,
-  DEFAULT_CONFIG 
+  DEFAULT_CONFIG
 } from './utils/data-generator';
+import { assertNonEmptyString, assertFiniteAtLeast } from './utils/assert';
 import type { Palette } from './palettes';
 
 // Re-export palette utilities
@@ -94,14 +95,14 @@ const MIX_NOISE_AMPLITUDE = 0.2;
  * Why: Prevents subtle bugs or crashes stemming from impossible parameters.
  */
 function validateMeta(meta: SpectroMeta): void {
-  if (!meta.streamId) throw new Error('streamId is required');
-  if (!Number.isFinite(meta.channels) || meta.channels < MIN_CHANNELS) throw new Error('Invalid channel count');
-  if (!Number.isFinite(meta.sampleRateHz) || meta.sampleRateHz < MIN_SAMPLE_RATE_HZ) throw new Error('Invalid sample rate');
-  if (!Number.isFinite(meta.nfft) || meta.nfft < MIN_NFFT) throw new Error('Invalid FFT size');
-  if (!Number.isFinite(meta.hopSize) || meta.hopSize < MIN_HOP_SIZE) throw new Error('Invalid hop size');
-  if (!Number.isFinite(meta.binCount) || meta.binCount < MIN_BIN_COUNT) throw new Error('Invalid bin count');
-  if (!Number.isFinite(meta.freqStartHz) || meta.freqStartHz < MIN_FREQ_START_HZ) throw new Error('Invalid start frequency');
-  if (!Number.isFinite(meta.freqStepHz) || meta.freqStepHz < MIN_FREQ_STEP_HZ) throw new Error('Invalid frequency step');
+  assertNonEmptyString(meta.streamId, 'streamId');
+  assertFiniteAtLeast(meta.channels, MIN_CHANNELS, 'channels');
+  assertFiniteAtLeast(meta.sampleRateHz, MIN_SAMPLE_RATE_HZ, 'sampleRateHz');
+  assertFiniteAtLeast(meta.nfft, MIN_NFFT, 'nfft');
+  assertFiniteAtLeast(meta.hopSize, MIN_HOP_SIZE, 'hopSize');
+  assertFiniteAtLeast(meta.binCount, MIN_BIN_COUNT, 'binCount');
+  assertFiniteAtLeast(meta.freqStartHz, MIN_FREQ_START_HZ, 'freqStartHz');
+  assertFiniteAtLeast(meta.freqStepHz, MIN_FREQ_STEP_HZ, 'freqStepHz');
   if (!(meta.scale === 'dbfs' || meta.scale === 'linear')) throw new Error(`Invalid scale ${meta.scale}`);
   if (meta.freqScale && !(meta.freqScale === 'linear' || meta.freqScale === 'log' || meta.freqScale === 'mel')) {
     throw new Error(`Invalid freqScale ${meta.freqScale}`);
