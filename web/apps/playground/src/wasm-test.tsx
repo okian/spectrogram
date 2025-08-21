@@ -7,6 +7,83 @@
 import * as React from 'react';
 import { fftReal, magnitudeDbfs, initWasm } from '@spectro/wasm-bindings';
 
+
+/**
+ * Quantity of samples used for the synthetic test signal.
+ * Why: FFT routines are most efficient on power-of-two sizes.
+ */
+export const SAMPLE_COUNT = 1024;
+
+/**
+ * Frequency of the generated sine wave in hertz.
+ * Why: a deterministic 100 Hz tone simplifies validation.
+ */
+export const TEST_FREQ_HZ = 100;
+
+/**
+ * Audio sampling rate for the test signal in hertz.
+ * Why: 48 kHz reflects common audio hardware and defines FFT bin spacing.
+ */
+export const SAMPLE_RATE_HZ = 48_000;
+
+/**
+ * Produce a sine wave for deterministic FFT testing.
+ * How: generates `count` samples of a `freqHz` tone at `sampleRateHz`.
+ * Validates all inputs and fails fast on invalid parameters.
+ */
+export function generateSineWave(
+  count: number,
+  freqHz: number,
+  sampleRateHz: number
+): Float32Array {
+  if (!Number.isFinite(count) || count <= 0) {
+    throw new Error('Sample count must be a positive finite number');
+  }
+  if (!Number.isFinite(freqHz) || freqHz <= 0) {
+    throw new Error('Frequency must be a positive finite number');
+  }
+  if (!Number.isFinite(sampleRateHz) || sampleRateHz <= 0) {
+    throw new Error('Sample rate must be a positive finite number');
+  }
+
+  const signal = new Float32Array(count);
+  const angular = 2 * Math.PI * freqHz;
+  for (let i = 0; i < count; i++) {
+    signal[i] = Math.sin((angular * i) / sampleRateHz);
+  }
+  return signal;
+}
+
+/**
+ * Scan a magnitude spectrum for its dominant frequency bin.
+ * What: returns the frequency represented by the largest magnitude entry.
+ * Why: verifies FFT correctness by detecting the expected peak.
+ * How: linear scan with immediate input validation.
+ */
+export function findPeakFrequency(
+  magnitudes: Float32Array,
+  sampleRateHz: number
+): number {
+  if (magnitudes.length === 0) {
+    throw new Error('Magnitude array must not be empty');
+  }
+  if (!Number.isFinite(sampleRateHz) || sampleRateHz <= 0) {
+    throw new Error('Sample rate must be a positive finite number');
+  }
+
+  let maxIndex = 0;
+  let maxValue = magnitudes[0];
+  for (let i = 1; i < magnitudes.length; i++) {
+    const value = magnitudes[i];
+    if (value > maxValue) {
+      maxValue = value;
+      maxIndex = i;
+    }
+  }
+  return (maxIndex * sampleRateHz) / magnitudes.length;
+}
+
+
 export const WasmTest: React.FC = () => {
   const [testResult, setTestResult] = React.useState<string>('Testing...');
   const [isLoading, setIsLoading] = React.useState(true);
@@ -32,10 +109,7 @@ export const WasmTest: React.FC = () => {
         setDebugInfo('WASM functions verified, creating test signal...');
         
         // Create a simple test signal (sine wave)
-        const signal = new Float32Array(1024);
-        for (let i = 0; i < 1024; i++) {
-          signal[i] = Math.sin(2 * Math.PI * 100 * i / 1024); // 100 Hz sine wave
-        }
+        const signal = generateSineWave(SAMPLE_COUNT, TEST_FREQ_HZ, SAMPLE_RATE_HZ);
 
         setDebugInfo('Testing FFT...');
         // Test FFT
@@ -47,17 +121,7 @@ export const WasmTest: React.FC = () => {
         const magResult = await magnitudeDbfs(signal, 1.0);
         console.log('Magnitude result length:', magResult.length);
 
-        // Find peak frequency
-        let maxIndex = 0;
-        let maxValue = magResult[0];
-        for (let i = 1; i < magResult.length; i++) {
-          if (magResult[i] > maxValue) {
-            maxValue = magResult[i];
-            maxIndex = i;
-          }
-        }
-
-        const peakFreq = (maxIndex * 48000) / 1024; // Assuming 48kHz sample rate
+        const peakFreq = findPeakFrequency(magResult, SAMPLE_RATE_HZ);
         setTestResult(`✅ WASM working! Peak frequency: ${peakFreq.toFixed(1)} Hz (expected ~100 Hz)`);
         setDebugInfo('Test completed successfully');
       } catch (error) {
