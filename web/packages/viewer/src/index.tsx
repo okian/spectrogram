@@ -4,16 +4,17 @@ import type { WebGLRenderer } from 'three';
 import { SpectroRingBuffer } from './core/ring-buffer';
 import { Heatmap2D } from './renderers/heatmap-2d';
 import { Legend } from './ui/legend';
-import { DEFAULT_BG } from './constants';
+import { DEFAULT_BG, DEFAULT_GENERATED_FPS } from './constants';
 import {
-  generateRealisticSpectrogramData, 
-  generateSignalByType, 
+  generateRealisticSpectrogramData,
+  generateSignalByType,
   generateMusicSignal,
   generateMixedSignal,
   generateSTFTFrames,
   type SignalType,
-  DEFAULT_CONFIG 
+  DEFAULT_CONFIG
 } from './utils/data-generator';
+import { assertNonEmptyString, assertFiniteAtLeast } from './utils/assert';
 import type { Palette } from './palettes';
 
 // Re-export palette utilities
@@ -22,7 +23,7 @@ export { generateLUT, samplePalette, type Palette, type PaletteName, type RGBA }
 // Re-export data generator types
 export { type SignalType } from './utils/data-generator';
 // Re-export shared constants
-export { DEFAULT_BG } from './constants';
+export { DEFAULT_BG, DEFAULT_GENERATED_FPS } from './constants';
 
 /** View modes supported by the spectrogram viewer. */
 export type ViewMode = '2d-heatmap' | '2d-waterfall' | '3d-waterfall' | 'polar' | 'bars' | 'ridge' | 'waveform' | 'mel' | 'chroma';
@@ -75,6 +76,38 @@ function assertInteger(value: number, name: string, min: number): void {
 }
 
 /**
+ * Synthetic data frame rate in frames per second.
+ * What: Determines temporal resolution when generating demo STFT frames.
+ * Why: Keeps generation inexpensive while still showing motion.
+ * How: Multiply duration by this rate to compute total frame count.
+ */
+const SYNTHETIC_FRAME_RATE = 10;
+
+/**
+ * Amplitude of the music component in mixed demo signals.
+ * What: Scales music contribution when synthesizing a composite stream.
+ * Why: Emphasizes musical content without overpowering speech or noise.
+ * How: Chosen empirically as 0.6 to balance clarity and headroom.
+ */
+const MIX_MUSIC_AMPLITUDE = 0.6;
+
+/**
+ * Amplitude of the speech component in mixed demo signals.
+ * What: Controls speech prominence in the synthetic blend.
+ * Why: Keeps narration audible yet secondary to music.
+ * How: Set to 0.4 so speech remains clear alongside other elements.
+ */
+const MIX_SPEECH_AMPLITUDE = 0.4;
+
+/**
+ * Amplitude of the noise component in mixed demo signals.
+ * What: Introduces background noise for realism.
+ * Why: Simulates typical environmental noise levels without distraction.
+ * How: Fixed at 0.2 to provide subtle ambience.
+ */
+const MIX_NOISE_AMPLITUDE = 0.2;
+
+/**
  * Validate incoming spectrogram metadata and fail fast on invalid values.
  * What: Ensures the stream configuration is sane before allocating GPU memory.
  * Why: Prevents subtle bugs or crashes stemming from impossible parameters.
@@ -88,6 +121,14 @@ function validateMeta(meta: SpectroMeta): void {
   assertInteger(meta.binCount, 'binCount', MIN_BIN_COUNT);
   if (!Number.isFinite(meta.freqStartHz) || meta.freqStartHz < MIN_FREQ_START_HZ) throw new Error('Invalid start frequency');
   if (!Number.isFinite(meta.freqStepHz) || meta.freqStepHz < MIN_FREQ_STEP_HZ) throw new Error('Invalid frequency step');
+  assertNonEmptyString(meta.streamId, 'streamId');
+  assertFiniteAtLeast(meta.channels, MIN_CHANNELS, 'channels');
+  assertFiniteAtLeast(meta.sampleRateHz, MIN_SAMPLE_RATE_HZ, 'sampleRateHz');
+  assertFiniteAtLeast(meta.nfft, MIN_NFFT, 'nfft');
+  assertFiniteAtLeast(meta.hopSize, MIN_HOP_SIZE, 'hopSize');
+  assertFiniteAtLeast(meta.binCount, MIN_BIN_COUNT, 'binCount');
+  assertFiniteAtLeast(meta.freqStartHz, MIN_FREQ_START_HZ, 'freqStartHz');
+  assertFiniteAtLeast(meta.freqStepHz, MIN_FREQ_STEP_HZ, 'freqStepHz');
   if (!(meta.scale === 'dbfs' || meta.scale === 'linear')) throw new Error(`Invalid scale ${meta.scale}`);
   if (meta.freqScale && !(meta.freqScale === 'linear' || meta.freqScale === 'log' || meta.freqScale === 'mel')) {
     throw new Error(`Invalid freqScale ${meta.freqScale}`);
@@ -331,13 +372,21 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     generateData: async (type) => {
       if (!ringBufferRef.current) return;
 
-      const dataType = type || currentConfig.dataType || 'realistic';
-      const duration = currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
-      
-      try {
-        let frames: Array<{ bins: Float32Array; timestamp: number }> = [];
-        
-        if (dataType === 'realistic') {
+        const dataType = type || currentConfig.dataType || 'realistic';
+        const duration = currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
+
+        // Fail fast on nonsensical durations to avoid wasted work.
+        if (!Number.isFinite(duration) || duration <= 0) {
+          throw new Error('Invalid duration');
+        }
+
+        // Total STFT frames derived from duration and synthetic frame rate.
+        const frameCount = Math.floor(duration * SYNTHETIC_FRAME_RATE);
+
+        try {
+          let frames: Array<{ bins: Float32Array; timestamp: number }> = [];
+
+          if (dataType === 'realistic') {
           // Generate varied realistic data
           const realisticFrames = await generateRealisticSpectrogramData(
             DEFAULT_CONFIG,
@@ -348,7 +397,12 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         } else if (dataType === 'music') {
           // Generate music signal
           const musicSignal = generateMusicSignal(duration * DEFAULT_CONFIG.sampleRate, DEFAULT_CONFIG.sampleRate);
-          frames = await generateSTFTFrames(musicSignal, DEFAULT_CONFIG, Math.floor(duration * 10));
+          // Convert duration to frame count using DEFAULT_GENERATED_FPS
+          frames = await generateSTFTFrames(
+            musicSignal,
+            DEFAULT_CONFIG,
+            Math.floor(duration * DEFAULT_GENERATED_FPS)
+          );
         } else if (dataType === 'mixed') {
           // Generate mixed signal
           const mixedSignal = generateMixedSignal(
@@ -360,7 +414,12 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
               { type: 'noise', amplitude: 0.2 }
             ]
           );
-          frames = await generateSTFTFrames(mixedSignal, DEFAULT_CONFIG, Math.floor(duration * 10));
+          // Convert duration to frame count using DEFAULT_GENERATED_FPS
+          frames = await generateSTFTFrames(
+            mixedSignal,
+            DEFAULT_CONFIG,
+            Math.floor(duration * DEFAULT_GENERATED_FPS)
+          );
         } else {
           // Generate single signal type
           const signal = generateSignalByType(
@@ -368,7 +427,12 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
             DEFAULT_CONFIG.sampleRate,
             dataType as SignalType
           );
-          frames = await generateSTFTFrames(signal, DEFAULT_CONFIG, Math.floor(duration * 10));
+          // Convert duration to frame count using DEFAULT_GENERATED_FPS
+          frames = await generateSTFTFrames(
+            signal,
+            DEFAULT_CONFIG,
+            Math.floor(duration * DEFAULT_GENERATED_FPS)
+          );
         }
         
         // Push frames to ring buffer

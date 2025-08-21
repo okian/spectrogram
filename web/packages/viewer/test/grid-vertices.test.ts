@@ -12,12 +12,15 @@ const TEST_MIN = -1;
 /** Maximum coordinate for test grid geometry. */
 const TEST_MAX = 1;
 
-describe('grid line vertex memoization', () => {
-  it('reuses arrays across calls', () => {
+describe('grid line vertex immutability', () => {
+  it('returns deep copies to protect cached data', () => {
     const first = getGridLineVertices();
+    // Mutate the first copy and ensure the cache is unaffected
+    const MUTATION_VALUE = 9999; // arbitrary test sentinel
+    first.horizontal[0][0] = MUTATION_VALUE;
     const second = getGridLineVertices();
-    expect(second.horizontal[0]).toBe(first.horizontal[0]);
-    expect(second.vertical[0]).toBe(first.vertical[0]);
+    expect(second.horizontal[0][0]).toBe(TEST_MIN);
+    expect(second.horizontal[0]).not.toBe(first.horizontal[0]);
   });
 
   it('matches expected grid geometry values', () => {
@@ -29,6 +32,11 @@ describe('grid line vertex memoization', () => {
 
   it('throws on invalid grid line count', () => {
     expect(() => generateGridLineVertices(1, TEST_MIN, TEST_MAX)).toThrow();
+  });
+
+  it('throws when max is not greater than min', () => {
+    expect(() => generateGridLineVertices(TEST_LINE_COUNT, TEST_MIN, TEST_MIN)).toThrow();
+    expect(() => generateGridLineVertices(TEST_LINE_COUNT, TEST_MAX, TEST_MIN)).toThrow();
   });
 });
 
