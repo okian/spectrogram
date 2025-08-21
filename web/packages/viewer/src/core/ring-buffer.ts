@@ -122,7 +122,15 @@ export class SpectroRingBuffer {
 
     // Copy data into the ring buffer storage.
     const offset = this.writeRow * binCount;
-    (this.data as any).set(bins, offset);
+    if (this.data instanceof Float32Array && bins instanceof Float32Array) {
+      this.data.set(bins, offset);
+    } else if (this.data instanceof Uint8Array && bins instanceof Uint8Array) {
+      this.data.set(bins, offset);
+    } else if (this.data instanceof Uint16Array && bins instanceof Uint16Array) {
+      this.data.set(bins, offset);
+    } else {
+      throw new Error('Type mismatch between ring buffer storage and input data.');
+    }
 
     // Update write position and populated row count.
     this.writeRow = (this.writeRow + 1) % maxRows;
