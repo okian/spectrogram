@@ -4,6 +4,15 @@ import { SpectroRingBuffer, RingBufferConfig } from './ring-buffer';
 
 /** Fake WebGL2 context providing float texture support by default. */
 class FakeWebGL2Context {
+  /** Numeric constant for texture target. */
+  TEXTURE_2D = 0;
+  /** Numeric constant for red channel format. */
+  RED = 0;
+  /** No-op bindTexture to satisfy interface. */
+  bindTexture(): void {}
+  /** No-op texSubImage2D to satisfy interface. */
+  texSubImage2D(): void {}
+  /** Report presence of any requested extension. */
   getExtension(_name: string): unknown {
     return {};
   }
@@ -16,6 +25,15 @@ const GL_WEBGL2 = new FakeWebGL2Context() as unknown as WebGL2RenderingContext;
 /** Generic WebGL1 context with configurable extension support. */
 class FakeWebGL1Context {
   constructor(private readonly extensions: Record<string, boolean>) {}
+  /** Numeric constant for texture target. */
+  TEXTURE_2D = 0;
+  /** Numeric constant for red channel format. */
+  RED = 0;
+  /** No-op bindTexture to satisfy interface. */
+  bindTexture(): void {}
+  /** No-op texSubImage2D to satisfy interface. */
+  texSubImage2D(): void {}
+  /** Return extension object when available. */
   getExtension(name: string): unknown {
     return this.extensions[name] ? {} : null;
   }
@@ -132,5 +150,91 @@ test('throws when linear filtering extension missing', () => {
     linearFilter: true
   };
   expect(() => new SpectroRingBuffer(GL_WEBGL1_NO_LINEAR, config)).toThrow(/linear filtering/i);
+});
+
+/**
+ * Ensure sequential row insertion stores data correctly.
+ */
+test('pushRow inserts rows sequentially', () => {
+  const config: RingBufferConfig = {
+    binCount: BIN_COUNT,
+    maxRows: MAX_ROWS,
+    format: 'UNORM8',
+    linearFilter: false,
+  };
+  const buffer = new SpectroRingBuffer(GL_WEBGL1_NO_EXT, config);
+  buffer.pushRow(new Uint8Array([1, 2, 3]));
+  buffer.pushRow(new Uint8Array([4, 5, 6]));
+  expect(buffer.getStats().rowCount).toBe(2);
+  const data = new Uint8Array(buffer.getTexture().image.data);
+  expect(Array.from(data.slice(0, BIN_COUNT))).toEqual([1, 2, 3]);
+  expect(Array.from(data.slice(BIN_COUNT, BIN_COUNT * 2))).toEqual([4, 5, 6]);
+});
+
+/**
+ * Verify old rows are overwritten when capacity wraps around.
+ */
+test('pushRow wraps around after reaching capacity', () => {
+  const config: RingBufferConfig = {
+    binCount: BIN_COUNT,
+    maxRows: 2,
+    format: 'UNORM8',
+    linearFilter: false,
+  };
+  const buffer = new SpectroRingBuffer(GL_WEBGL1_NO_EXT, config);
+  const a = new Uint8Array([1, 1, 1]);
+  const b = new Uint8Array([2, 2, 2]);
+  const c = new Uint8Array([3, 3, 3]);
+  buffer.pushRow(a);
+  buffer.pushRow(b);
+  buffer.pushRow(c); // overwrites first row
+  const stats = buffer.getStats();
+  expect(stats.rowCount).toBe(2);
+  expect(stats.writeRow).toBe(1);
+  const data = new Uint8Array(buffer.getTexture().image.data);
+  expect(Array.from(data.slice(0, BIN_COUNT))).toEqual(Array.from(c));
+  expect(Array.from(data.slice(BIN_COUNT, BIN_COUNT * 2))).toEqual(Array.from(b));
+});
+
+/**
+ * Ensure clear resets counters and zeroes texture data.
+ */
+test('clear empties the buffer', () => {
+  const config: RingBufferConfig = {
+    binCount: BIN_COUNT,
+    maxRows: MAX_ROWS,
+    format: 'UNORM8',
+    linearFilter: false,
+  };
+  const buffer = new SpectroRingBuffer(GL_WEBGL1_NO_EXT, config);
+  buffer.pushRow(new Uint8Array([1, 1, 1]));
+  buffer.clear();
+  const stats = buffer.getStats();
+  expect(stats.rowCount).toBe(0);
+  expect(stats.writeRow).toBe(0);
+  const data = new Uint8Array(buffer.getTexture().image.data);
+  expect(Array.from(data)).toEqual(new Array(BIN_COUNT * MAX_ROWS).fill(0));
+});
+
+/**
+ * Ensure resize allocates new storage and resets state.
+ */
+test('resize reinitializes internal storage', () => {
+  const config: RingBufferConfig = {
+    binCount: 2,
+    maxRows: 2,
+    format: 'UNORM8',
+    linearFilter: false,
+  };
+  const buffer = new SpectroRingBuffer(GL_WEBGL1_NO_EXT, config);
+  buffer.pushRow(new Uint8Array([1, 1]));
+  buffer.resize(4, 3);
+  const stats = buffer.getStats();
+  expect(stats.binCount).toBe(4);
+  expect(stats.maxRows).toBe(3);
+  expect(stats.rowCount).toBe(0);
+  expect(stats.writeRow).toBe(0);
+  expect(buffer.getTexture().image.width).toBe(4);
+  expect(buffer.getTexture().image.height).toBe(3);
 });
 

@@ -15,6 +15,15 @@ class ResizeObserverMock {
 
 // Stub WebGL context to satisfy float texture requirements
 class FakeWebGL2Context {
+  /** Numeric constant for texture target. */
+  TEXTURE_2D = 0;
+  /** Numeric constant for red channel format. */
+  RED = 0;
+  /** No-op bindTexture to satisfy interface. */
+  bindTexture(): void {}
+  /** No-op texSubImage2D to satisfy interface. */
+  texSubImage2D(): void {}
+  /** Report presence of any requested extension. */
   getExtension(_name: string): unknown {
     return {};
   }
