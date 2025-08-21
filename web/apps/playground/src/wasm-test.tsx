@@ -7,6 +7,28 @@
 import * as React from 'react';
 import { fftReal, magnitudeDbfs, initWasm } from '@spectro/wasm-bindings';
 
+/**
+ * Indicates whether verbose debug logging is enabled.
+ * What: Evaluates both Node and Vite development markers.
+ * Why: Ensures tests and builds share a consistent toggle.
+ * How: Checks `process.env.NODE_ENV` and `import.meta.env.DEV` when available.
+ */
+const DEBUG_ENABLED =
+  (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') ||
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV === true);
+
+/**
+ * Conditionally log debug output during development builds.
+ * What: Wrapper around console.log governed by {@link DEBUG_ENABLED}.
+ * Why: Keeps production consoles clean while aiding diagnosis when developing.
+ * How: Emits only when debugging is enabled.
+ */
+function debug(...args: unknown[]): void {
+  if (DEBUG_ENABLED) {
+    console.log(...args);
+  }
+}
+
 
 /**
  * Quantity of samples used for the synthetic test signal.
@@ -25,6 +47,11 @@ export const TEST_FREQ_HZ = 100;
  * Why: 48 kHz reflects common audio hardware and defines FFT bin spacing.
  */
 export const SAMPLE_RATE_HZ = 48_000;
+
+/**
+ * Amplitude used when computing magnitude, representing unity gain.
+ */
+const UNITY_GAIN = 1.0;
 
 /**
  * Produce a sine wave for deterministic FFT testing.
@@ -114,12 +141,12 @@ export const WasmTest: React.FC = () => {
         setDebugInfo('Testing FFT...');
         // Test FFT
         const fftResult = await fftReal(signal);
-        console.log('FFT result length:', fftResult.length);
+        debug('FFT result length:', fftResult.length);
 
         setDebugInfo('Testing magnitude calculation...');
         // Test magnitude calculation
-        const magResult = await magnitudeDbfs(signal, 1.0);
-        console.log('Magnitude result length:', magResult.length);
+        const magResult = await magnitudeDbfs(signal, UNITY_GAIN);
+        debug('Magnitude result length:', magResult.length);
 
         const peakFreq = findPeakFrequency(magResult, SAMPLE_RATE_HZ);
         setTestResult(`✅ WASM working! Peak frequency: ${peakFreq.toFixed(1)} Hz (expected ~100 Hz)`);

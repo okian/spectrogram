@@ -19,6 +19,8 @@ const LUT_HEIGHT = 1;
 const PLANE_SIZE = 2;
 /** Number of grid lines to draw per axis in the overlay. */
 const GRID_LINE_COUNT = 10;
+/** Minimum number of grid lines allowed for valid geometry generation. */
+const GRID_LINE_MIN_COUNT = 2;
 /** Color used for grid overlay lines. */
 const GRID_LINE_COLOR = '#333';
 /** Transparency applied to grid overlay lines. */
@@ -32,15 +34,23 @@ const GRID_MAX = 1;
  * Generate vertex arrays for the grid overlay.
  * What: Precomputes coordinates for horizontal and vertical grid lines as {@link Float32Array}s.
  * Why: Avoids per-render allocations and ensures stable geometry data.
- * How: Evenly interpolates positions between {@link GRID_MIN} and {@link GRID_MAX} for the given count.
+ * How: Validates inputs then evenly interpolates positions between {@link GRID_MIN} and {@link GRID_MAX} for the given count.
  */
 export function generateGridLineVertices(
   lineCount: number = GRID_LINE_COUNT,
   min: number = GRID_MIN,
   max: number = GRID_MAX
 ): { horizontal: Float32Array[]; vertical: Float32Array[] } {
-  if (lineCount < 2) {
-    throw new Error(`lineCount must be at least 2; got ${lineCount}`);
+  if (lineCount < GRID_LINE_MIN_COUNT) {
+    throw new Error(
+      `lineCount must be at least ${GRID_LINE_MIN_COUNT}; got ${lineCount}`
+    );
+  }
+  if (max <= min) {
+    throw new Error(`max must be greater than min; got min=${min}, max=${max}`);
+  }
+  if (max <= min) {
+    throw new Error(`max must be greater than min; got min=${min}, max=${max}`);
   }
   const horizontal: Float32Array[] = [];
   const vertical: Float32Array[] = [];
@@ -56,16 +66,36 @@ export function generateGridLineVertices(
  * Precomputed grid line vertex arrays reused across renders.
  * What: Memoizes geometry data at module load.
  * Why: Prevents repeated allocation of identical vertex buffers.
+ * How: Generated once and frozen to guard against accidental mutation.
  */
-const GRID_LINE_VERTICES = generateGridLineVertices();
+const GRID_LINE_VERTICES = Object.freeze(generateGridLineVertices());
 
 /**
  * Retrieve precomputed grid line vertices.
  * What: Exposes memoized geometry data.
  * Why: Enables reuse and testing of the cached vertex arrays.
  */
+/**
+ * Clone an array of vertex buffers.
+ * What: Produces deep copies of {@link Float32Array} entries.
+ * Why: Protects internal memoized geometry from external mutation.
+ * How: Uses {@link Float32Array#slice} to duplicate buffers.
+ */
+function cloneVertexArray(arrays: readonly Float32Array[]): Float32Array[] {
+  return arrays.map((array) => array.slice());
+}
+
+/**
+ * Retrieve precomputed grid line vertices.
+ * What: Exposes memoized geometry data to callers.
+ * Why: Allows tests and consumers to inspect grid layout without risking mutation of cached data.
+ * How: Returns deep copies of the internal arrays.
+ */
 export function getGridLineVertices() {
-  return GRID_LINE_VERTICES;
+  return {
+    horizontal: cloneVertexArray(GRID_LINE_VERTICES.horizontal),
+    vertical: cloneVertexArray(GRID_LINE_VERTICES.vertical)
+  };
 }
 
 /**

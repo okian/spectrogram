@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { describe, it, expect, vi } from 'vitest';
 
-import { textureSizeFromRingBuffer } from '../heatmap-2d';
+import { textureSizeFromRingBuffer, generateGridLineVertices } from '../heatmap-2d';
 import { SpectroRingBuffer } from '../../core/ring-buffer';
 
 // Mock WASM bindings to avoid requiring compiled artifacts during tests
-vi.mock('@spectro/wasm-bindings', () => ({}), { virtual: true });
+vi.mock('@spectro/wasm-bindings', () => ({}));
 
 /**
  * Helper to create a ring buffer of the specified dimensions.
@@ -43,5 +43,34 @@ describe('textureSizeFromRingBuffer', () => {
   it('throws on invalid statistics', () => {
     const badRing = { getStats: () => ({ binCount: 0, maxRows: 0 }) } as SpectroRingBuffer;
     expect(() => textureSizeFromRingBuffer(badRing)).toThrow();
+  });
+});
+
+/**
+ * Tests for {@link generateGridLineVertices}.
+ * What: Ensures geometry generation validates bounds and counts.
+ * Why: Guarantees fail-fast behavior on invalid parameters.
+ */
+describe('generateGridLineVertices', () => {
+  /** Line count used for test grids. */
+  const TEST_LINE_COUNT = 3;
+  /** Lower bound for valid grid generation. */
+  const TEST_MIN = 0;
+  /** Upper bound for valid grid generation. */
+  const TEST_MAX = 1;
+
+  it('throws when max is not greater than min', () => {
+    expect(() => generateGridLineVertices(TEST_LINE_COUNT, TEST_MAX, TEST_MAX)).toThrow();
+    expect(() => generateGridLineVertices(TEST_LINE_COUNT, TEST_MAX, TEST_MIN)).toThrow();
+  });
+
+  it('generates expected line count for valid bounds', () => {
+    const { horizontal, vertical } = generateGridLineVertices(
+      TEST_LINE_COUNT,
+      TEST_MIN,
+      TEST_MAX
+    );
+    expect(horizontal).toHaveLength(TEST_LINE_COUNT);
+    expect(vertical).toHaveLength(TEST_LINE_COUNT);
   });
 });
