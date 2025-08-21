@@ -82,6 +82,14 @@ export const PlaygroundApp: React.FC = () => {
     await apiRef.current?.generateData(type);
   };
 
+  /**
+   * Handle hover events emitted from the spectrogram.
+   * What: Provides an extension point for future UI interactions.
+   * Why: Keeps the playground silent in production yet ready for instrumentation.
+   * How: Memoized no-op to avoid re-renders and overhead.
+   */
+  const handleHover = React.useCallback((): void => {}, []);
+
   return (
     <div style={{ 
       fontFamily: 'system-ui, -apple-system, sans-serif', 
@@ -456,9 +464,7 @@ export const PlaygroundApp: React.FC = () => {
             <Spectrogram
               config={config}
               onReady={handleReady}
-              onHover={(data) => {
-                console.log('Hover:', data);
-              }}
+              onHover={handleHover}
               style={{ borderRadius: '8px', overflow: 'hidden' }}
             />
           </div>

@@ -57,6 +57,14 @@ const DEFAULT_BIN_COUNT = 1025;
 const DEFAULT_MAX_ROWS = 512;
 
 /**
+ * Toggle for verbose development logging.
+ * What: Emits console diagnostics when true.
+ * Why: Keeps production builds quiet while aiding local debugging.
+ * How: Driven by NODE_ENV; defaults to silent in production.
+ */
+const ENABLE_DEBUG_LOGS = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+
+/**
  * Validate incoming spectrogram metadata and fail fast on invalid values.
  * What: Ensures the stream configuration is sane before allocating GPU memory.
  * Why: Prevents subtle bugs or crashes stemming from impossible parameters.
@@ -358,7 +366,9 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
           ringBufferRef.current?.pushRow(frame.bins);
         });
         
-        console.log(`Generated ${frames.length} frames of ${dataType} data`);
+        if (ENABLE_DEBUG_LOGS) {
+          console.log(`Generated ${frames.length} frames of ${dataType} data`);
+        }
       } catch (error) {
         console.error('Failed to generate data:', error);
       }
