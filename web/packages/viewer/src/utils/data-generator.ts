@@ -35,6 +35,13 @@ export const DEFAULT_CONFIG: SignalConfig = {
 const MAX_AMPLITUDE = 1.0;
 
 /**
+ * Minimum allowed signal amplitude.
+ * What: Lower bound for any amplitude values used during generation.
+ * Why: Prevents negative amplitudes and removes implicit magic numbers.
+ */
+const MIN_AMPLITUDE = 0.0;
+
+/**
  * Value used to pad incomplete analysis windows.
  * What: Explicit zero constant to avoid magic numbers when padding.
  * Why: Clarifies intent and centralizes padding behavior.
@@ -155,9 +162,14 @@ export function generateTestSignal(
   }
 
   for (const amp of amplitudes) {
-    if (!Number.isFinite(amp) || amp < 0 || amp > MAX_AMPLITUDE) {
+    if (
+      !Number.isFinite(amp) ||
+      amp < MIN_AMPLITUDE ||
+      amp > MAX_AMPLITUDE
+    ) {
       throw new Error(
-        `amplitudes must be finite numbers within [0, ${MAX_AMPLITUDE}]`
+        `amplitudes must be finite numbers within [` +
+          `${MIN_AMPLITUDE}, ${MAX_AMPLITUDE}]`
       );
     }
   }
@@ -406,7 +418,7 @@ export async function generateRealisticSpectrogramData(
  * Generate a mixed signal with multiple simultaneous sources.
  * What: Creates complex audio with overlapping frequency content
  * Why: Tests spectrogram's ability to show multiple simultaneous signals
- * How: Mixes individually generated signals and normalizes to prevent clipping.
+ * How: Validates amplitudes, mixes signals, clamps, and normalizes to prevent clipping.
  * @param signalGenerator Optional injection of signal generator for testing.
  */
 export function generateMixedSignal(
@@ -425,12 +437,20 @@ export function generateMixedSignal(
     throw new Error('sources array must contain at least one element');
   }
 
+  // Validate amplitudes before any processing to fail fast on bad input.
+  for (const { amplitude } of sources) {
+    if (!Number.isFinite(amplitude) || amplitude < MIN_AMPLITUDE) {
+      throw new Error('source amplitude must be a finite, non-negative number');
+    }
+  }
+
   const mixedSignal = new Float32Array(length);
   let maxAbs = 0;
 
   for (const source of sources) {
     const sourceSignal = signalGenerator(length, sampleRate, source.type);
-    const amplitude = source.amplitude;
+    // Clamp amplitude to the documented range to prevent unintended scaling.
+    const amplitude = Math.min(source.amplitude, MAX_AMPLITUDE);
     for (let i = 0; i < length; i++) {
       mixedSignal[i] += sourceSignal[i] * amplitude;
       const absVal = Math.abs(mixedSignal[i]);
@@ -441,7 +461,7 @@ export function generateMixedSignal(
   }
 
   if (maxAbs > MAX_AMPLITUDE) {
-    const scale = 1 / maxAbs;
+    const scale = MAX_AMPLITUDE / maxAbs;
     for (let i = 0; i < length; i++) {
       mixedSignal[i] *= scale;
     }
