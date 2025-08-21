@@ -4,7 +4,7 @@ import type { WebGLRenderer } from 'three';
 import { SpectroRingBuffer } from './core/ring-buffer';
 import { Heatmap2D } from './renderers/heatmap-2d';
 import { Legend } from './ui/legend';
-import { DEFAULT_BG } from './constants';
+import { DEFAULT_BG, DEFAULT_GENERATED_FPS } from './constants';
 import {
   generateRealisticSpectrogramData, 
   generateSignalByType, 
@@ -22,7 +22,7 @@ export { generateLUT, samplePalette, type Palette, type PaletteName, type RGBA }
 // Re-export data generator types
 export { type SignalType } from './utils/data-generator';
 // Re-export shared constants
-export { DEFAULT_BG } from './constants';
+export { DEFAULT_BG, DEFAULT_GENERATED_FPS } from './constants';
 
 /** View modes supported by the spectrogram viewer. */
 export type ViewMode = '2d-heatmap' | '2d-waterfall' | '3d-waterfall' | 'polar' | 'bars' | 'ridge' | 'waveform' | 'mel' | 'chroma';
@@ -330,7 +330,12 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         } else if (dataType === 'music') {
           // Generate music signal
           const musicSignal = generateMusicSignal(duration * DEFAULT_CONFIG.sampleRate, DEFAULT_CONFIG.sampleRate);
-          frames = await generateSTFTFrames(musicSignal, DEFAULT_CONFIG, Math.floor(duration * 10));
+          // Convert duration to frame count using DEFAULT_GENERATED_FPS
+          frames = await generateSTFTFrames(
+            musicSignal,
+            DEFAULT_CONFIG,
+            Math.floor(duration * DEFAULT_GENERATED_FPS)
+          );
         } else if (dataType === 'mixed') {
           // Generate mixed signal
           const mixedSignal = generateMixedSignal(
@@ -342,7 +347,12 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
               { type: 'noise', amplitude: 0.2 }
             ]
           );
-          frames = await generateSTFTFrames(mixedSignal, DEFAULT_CONFIG, Math.floor(duration * 10));
+          // Convert duration to frame count using DEFAULT_GENERATED_FPS
+          frames = await generateSTFTFrames(
+            mixedSignal,
+            DEFAULT_CONFIG,
+            Math.floor(duration * DEFAULT_GENERATED_FPS)
+          );
         } else {
           // Generate single signal type
           const signal = generateSignalByType(
@@ -350,7 +360,12 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
             DEFAULT_CONFIG.sampleRate,
             dataType as SignalType
           );
-          frames = await generateSTFTFrames(signal, DEFAULT_CONFIG, Math.floor(duration * 10));
+          // Convert duration to frame count using DEFAULT_GENERATED_FPS
+          frames = await generateSTFTFrames(
+            signal,
+            DEFAULT_CONFIG,
+            Math.floor(duration * DEFAULT_GENERATED_FPS)
+          );
         }
         
         // Push frames to ring buffer
