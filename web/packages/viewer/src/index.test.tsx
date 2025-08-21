@@ -69,6 +69,13 @@ function hexToRgb(hex: string): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+/**
+ * Fractional value used to trigger integer validation failures.
+ * What: Provides a reusable non-integer for tests.
+ * Why: Ensures metadata validation rejects non-whole numbers.
+ */
+const NON_INTEGER_VALUE = 1.5;
+
 describe('Spectrogram metadata handling', () => {
   it('resizes ring buffer and updates stats on meta change', async () => {
     let api: SpectrogramAPI | null = null;
@@ -107,6 +114,28 @@ describe('Spectrogram metadata handling', () => {
 
     const badMeta = makeMeta({ binCount: 0 });
     expect(() => api!.setMeta(badMeta)).toThrow();
+  });
+
+  /**
+   * Validates rejection of non-integer metadata fields.
+   * What: Attempts to set fractional counts for required integer fields.
+   * Why: Prevents allocation errors from fractional buffer sizes.
+   * How: Iterates over each count-based key and expects setMeta to throw.
+   */
+  it('rejects non-integer counts', async () => {
+    let api: SpectrogramAPI | null = null;
+    render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} onReady={a => (api = a)} />);
+    await act(async () => {
+      await new Promise(res => setTimeout(res, 0));
+    });
+    if (!api) throw new Error('API not initialized');
+
+    // Metadata fields that should strictly be integers.
+    const countKeys: Array<keyof SpectroMeta> = ['channels', 'sampleRateHz', 'nfft', 'hopSize', 'binCount'];
+    for (const key of countKeys) {
+      const meta = makeMeta({ [key]: NON_INTEGER_VALUE } as Partial<SpectroMeta>);
+      expect(() => api!.setMeta(meta)).toThrow(/must be an integer/);
+    }
   });
 
   it('rejects frames with mismatched bin counts', async () => {

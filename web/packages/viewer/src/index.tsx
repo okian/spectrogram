@@ -58,6 +58,24 @@ const DEFAULT_BIN_COUNT = 1025;
 const DEFAULT_MAX_ROWS = 512;
 
 /**
+ * Ensure a numeric field is a whole number within range.
+ * What: Guards all count-based metadata values.
+ * Why: Fractions would produce incorrect buffer sizes or misaligned frames.
+ * How: Validates finiteness, integer-ness, and minimum bound.
+ */
+function assertInteger(value: number, name: string, min: number): void {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${name} must be finite`);
+  }
+  if (!Number.isInteger(value)) {
+    throw new Error(`${name} must be an integer, received ${value}`);
+  }
+  if (value < min) {
+    throw new Error(`${name} must be >= ${min}, received ${value}`);
+  }
+}
+
+/**
  * Synthetic data frame rate in frames per second.
  * What: Determines temporal resolution when generating demo STFT frames.
  * Why: Keeps generation inexpensive while still showing motion.
@@ -95,6 +113,14 @@ const MIX_NOISE_AMPLITUDE = 0.2;
  * Why: Prevents subtle bugs or crashes stemming from impossible parameters.
  */
 function validateMeta(meta: SpectroMeta): void {
+  if (!meta.streamId) throw new Error('streamId is required');
+  assertInteger(meta.channels, 'channels', MIN_CHANNELS);
+  assertInteger(meta.sampleRateHz, 'sampleRateHz', MIN_SAMPLE_RATE_HZ);
+  assertInteger(meta.nfft, 'nfft', MIN_NFFT);
+  assertInteger(meta.hopSize, 'hopSize', MIN_HOP_SIZE);
+  assertInteger(meta.binCount, 'binCount', MIN_BIN_COUNT);
+  if (!Number.isFinite(meta.freqStartHz) || meta.freqStartHz < MIN_FREQ_START_HZ) throw new Error('Invalid start frequency');
+  if (!Number.isFinite(meta.freqStepHz) || meta.freqStepHz < MIN_FREQ_STEP_HZ) throw new Error('Invalid frequency step');
   assertNonEmptyString(meta.streamId, 'streamId');
   assertFiniteAtLeast(meta.channels, MIN_CHANNELS, 'channels');
   assertFiniteAtLeast(meta.sampleRateHz, MIN_SAMPLE_RATE_HZ, 'sampleRateHz');
