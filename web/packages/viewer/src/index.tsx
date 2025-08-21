@@ -58,6 +58,12 @@ const DEFAULT_BIN_COUNT = 1025;
 const DEFAULT_MAX_ROWS = 512;
 
 /**
+ * Toggle for verbose development logging.
+ * What: Emits console diagnostics when true.
+ * Why: Keeps production builds quiet while aiding local debugging.
+ * How: Driven by NODE_ENV; defaults to silent in production.
+ */
+const ENABLE_DEBUG_LOGS = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
  * Ensure a numeric field is a whole number within range.
  * What: Guards all count-based metadata values.
  * Why: Fractions would produce incorrect buffer sizes or misaligned frames.
@@ -440,7 +446,9 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
           ringBufferRef.current?.pushRow(frame.bins);
         });
         
-        console.log(`Generated ${frames.length} frames of ${dataType} data`);
+        if (ENABLE_DEBUG_LOGS) {
+          console.log(`Generated ${frames.length} frames of ${dataType} data`);
+        }
       } catch (error) {
         console.error('Failed to generate data:', error);
       }
