@@ -84,7 +84,7 @@ test('initWasm throws clear error when WASM bundle is missing', async () => {
 test('initWasm throws clear error on network failure', async () => {
   // Replace fetch with a stub that simulates a network failure.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const failingFetch: typeof fetch = async (): Promise<any> => {
+  const failingFetch: typeof fetch = async (): Promise<Response> => {
     throw new TypeError('Failed to fetch');
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
