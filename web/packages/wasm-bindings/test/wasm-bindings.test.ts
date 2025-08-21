@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, rename } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import {
   initWasm,
   fftReal,
@@ -51,11 +52,33 @@ const realInstantiateStreaming = WebAssembly.instantiateStreaming;
   return realInstantiateStreaming(source, importObject);
 };
 
-// Utility to create a simple test buffer
+/**
+ * Create a simple deterministic input buffer for testing routines.
+ */
 function makeInput(): Float32Array {
   return new Float32Array(TEST_SIGNAL_VALUES);
 }
 
+/**
+ * Ensure initWasm reports a helpful error when the generated bundle is missing.
+ */
+test('initWasm throws clear error when WASM bundle is missing', async () => {
+  const wasmJsPath = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../pkg/spectro_dsp.js'
+  );
+  const backupPath = `${wasmJsPath}.bak`;
+  await rename(wasmJsPath, backupPath);
+  try {
+    await assert.rejects(initWasm(), { message: /WASM bundle not found/ });
+  } finally {
+    await rename(backupPath, wasmJsPath);
+  }
+});
+
+/**
+ * Validate that the bindings load correctly and enforce parameter checks.
+ */
 test('WASM bindings execute and validate inputs', async () => {
   await initWasm();
   assert.ok(streamingUsed, 'instantiateStreaming should be used for init');
