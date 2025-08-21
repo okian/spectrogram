@@ -6,6 +6,19 @@
 
 import * as THREE from 'three';
 
+/**
+ * Mapping from configuration format to THREE.js texture data type.
+ * What: Associates each supported sample format with the corresponding WebGL
+ * texture data type.
+ * Why: Ensures textures are constructed with the correct precision and
+ * storage, avoiding GPU/CPU mismatches.
+ */
+const TEXTURE_TYPE_BY_FORMAT: Record<RingBufferConfig['format'], THREE.TextureDataType> = {
+  R32F: THREE.FloatType,
+  R16F: THREE.HalfFloatType,
+  UNORM8: THREE.UnsignedByteType
+};
+
 /** Ring buffer configuration. */
 export interface RingBufferConfig {
   /** Number of frequency bins per row. */
@@ -26,33 +39,64 @@ export interface RingBufferConfig {
 export class SpectroRingBuffer {
   private gl: WebGLRenderingContext;
   private texture: THREE.DataTexture;
-  private data: Float32Array;
+  private data: Float32Array | Uint8Array;
   private writeRow = 0;
   private rowCount = 0;
   private config: RingBufferConfig;
-
+  /**
+   * Initialize the ring buffer.
+   * What: Sets up CPU storage and GPU texture based on configuration.
+   * Why: Prepares the buffer for streaming spectrogram rows.
+   */
   constructor(gl: WebGLRenderingContext, config: RingBufferConfig) {
     this.gl = gl;
     this.config = config;
-    
-    // Allocate data buffer
-    this.data = new Float32Array(config.binCount * config.maxRows);
-    
-    // Create GPU texture
-    this.texture = new THREE.DataTexture(
-      this.data,
-      config.binCount,
-      config.maxRows,
+
+    // Allocate CPU-side storage tailored to the texture format.
+    this.data = this.createDataArray(config.binCount * config.maxRows);
+
+    // Initialize GPU texture with matching type and parameters.
+    this.texture = this.createTexture(this.data, config.binCount, config.maxRows);
+  }
+
+  /**
+   * Create a typed array sized for the ring buffer.
+   * What: Allocates either Float32Array or Uint8Array based on configuration.
+   * Why: Guarantees CPU memory matches the GPU texture format for efficient
+   * uploads and minimal conversion overhead.
+   */
+  private createDataArray(size: number): Float32Array | Uint8Array {
+    return this.config.format === 'UNORM8'
+      ? new Uint8Array(size)
+      : new Float32Array(size); // R32F and R16F both use float32 storage.
+  }
+
+  /**
+   * Construct a THREE.js DataTexture for the ring buffer.
+   * What: Builds texture with correct dimensions and data type.
+   * Why: Encapsulates texture creation to avoid duplicated logic and ensures
+   * consistent sampler configuration across resizes.
+   */
+  private createTexture(
+    data: Float32Array | Uint8Array,
+    width: number,
+    height: number
+  ): THREE.DataTexture {
+    const texture = new THREE.DataTexture(
+      data,
+      width,
+      height,
       THREE.RedFormat,
-      THREE.FloatType
+      TEXTURE_TYPE_BY_FORMAT[this.config.format]
     );
-    
-    this.texture.generateMipmaps = false;
-    this.texture.wrapS = THREE.ClampToEdgeWrapping;
-    this.texture.wrapT = THREE.ClampToEdgeWrapping;
-    this.texture.magFilter = config.linearFilter ? THREE.LinearFilter : THREE.NearestFilter;
-    this.texture.minFilter = config.linearFilter ? THREE.LinearFilter : THREE.NearestFilter;
-    this.texture.needsUpdate = true;
+
+    texture.generateMipmaps = false;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.magFilter = this.config.linearFilter ? THREE.LinearFilter : THREE.NearestFilter;
+    texture.minFilter = this.config.linearFilter ? THREE.LinearFilter : THREE.NearestFilter;
+    texture.needsUpdate = true;
+    return texture;
   }
 
   /**
@@ -61,33 +105,30 @@ export class SpectroRingBuffer {
    * Why: Enables continuous streaming without memory reallocation.
    */
   pushRow(bins: Float32Array | Uint16Array | Uint8Array): void {
-    const { binCount, maxRows } = this.config;
-    
-    // Convert to float32 if needed
-    let floatBins: Float32Array;
-    if (bins instanceof Float32Array) {
-      floatBins = bins;
-    } else if (bins instanceof Uint16Array) {
-      floatBins = new Float32Array(bins.length);
-      for (let i = 0; i < bins.length; i++) {
-        floatBins[i] = bins[i] / 65535.0; // Normalize to [0,1]
-      }
-    } else {
-      floatBins = new Float32Array(bins.length);
-      for (let i = 0; i < bins.length; i++) {
-        floatBins[i] = bins[i] / 255.0; // Normalize to [0,1]
-      }
+    const { binCount, maxRows, format } = this.config;
+
+    // Validate bin count to prevent silent memory corruption.
+    if (bins.length !== binCount) {
+      throw new Error(`Expected ${binCount} bins, received ${bins.length}.`);
     }
-    
-    // Copy data to ring buffer
+
+    // Ensure provided array matches the configured texture format.
+    if (format === 'UNORM8' && !(bins instanceof Uint8Array)) {
+      throw new Error('UNORM8 format requires Uint8Array input.');
+    }
+    if (format !== 'UNORM8' && !(bins instanceof Float32Array)) {
+      throw new Error(`${format} format requires Float32Array input.`);
+    }
+
+    // Copy data into the ring buffer storage.
     const offset = this.writeRow * binCount;
-    this.data.set(floatBins, offset);
-    
-    // Update write position
+    (this.data as any).set(bins, offset);
+
+    // Update write position and populated row count.
     this.writeRow = (this.writeRow + 1) % maxRows;
     this.rowCount = Math.min(this.rowCount + 1, maxRows);
-    
-    // Update GPU texture
+
+    // Mark texture for upload to GPU on next render.
     this.texture.needsUpdate = true;
   }
 
@@ -135,27 +176,12 @@ export class SpectroRingBuffer {
     if (binCount === this.config.binCount && maxRows === this.config.maxRows) {
       return; // No change needed
     }
-    
-    // Reallocate data buffer
-    this.data = new Float32Array(binCount * maxRows);
-    
-    // Recreate GPU texture
+
+    // Reallocate CPU buffer and recreate GPU texture.
+    this.data = this.createDataArray(binCount * maxRows);
     this.texture.dispose();
-    this.texture = new THREE.DataTexture(
-      this.data,
-      binCount,
-      maxRows,
-      THREE.RedFormat,
-      THREE.FloatType
-    );
-    
-    this.texture.generateMipmaps = false;
-    this.texture.wrapS = THREE.ClampToEdgeWrapping;
-    this.texture.wrapT = THREE.ClampToEdgeWrapping;
-    this.texture.magFilter = this.config.linearFilter ? THREE.LinearFilter : THREE.NearestFilter;
-    this.texture.minFilter = this.config.linearFilter ? THREE.LinearFilter : THREE.NearestFilter;
-    this.texture.needsUpdate = true;
-    
+    this.texture = this.createTexture(this.data, binCount, maxRows);
+
     // Update config and reset state
     this.config.binCount = binCount;
     this.config.maxRows = maxRows;

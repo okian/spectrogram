@@ -23,11 +23,14 @@
     "typescript": "^5.5.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@types/three": "^0.160.0"
+    "@types/three": "^0.160.0",
+    "@types/node": "^20.12.7",
+    "tsx": "^4.9.3"
   },
   "scripts": {
     "build": "tsup src/index.tsx --format esm,cjs --dts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsx --test src/core/ring-buffer.test.ts"
   }
 }
 
