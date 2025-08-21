@@ -12,10 +12,16 @@ vi.mock('@spectro/wasm-bindings', () => ({}), { virtual: true });
  * What: Instantiates SpectroRingBuffer with a dummy WebGL context.
  * Why: Allows CPU-side testing without actual WebGL.
  */
-function makeRingBuffer(binCount: number, maxRows: number): SpectroRingBuffer {
-  const gl = {} as unknown as WebGLRenderingContext;
-  return new SpectroRingBuffer(gl, { binCount, maxRows, format: 'R32F', linearFilter: false });
-}
+  function makeRingBuffer(binCount: number, maxRows: number): SpectroRingBuffer {
+    class FakeWebGL2Context {
+      getExtension(_name: string): unknown {
+        return {};
+      }
+    }
+    (globalThis as any).WebGL2RenderingContext = FakeWebGL2Context;
+    const gl = new FakeWebGL2Context() as unknown as WebGL2RenderingContext;
+    return new SpectroRingBuffer(gl, { binCount, maxRows, format: 'R32F', linearFilter: false });
+  }
 
 describe('textureSizeFromRingBuffer', () => {
   it('writes buffer stats into the provided vector', () => {

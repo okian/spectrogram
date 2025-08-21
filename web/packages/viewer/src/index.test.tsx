@@ -13,8 +13,15 @@ class ResizeObserverMock {
 }
 (global as any).ResizeObserver = ResizeObserverMock;
 
-// Stub canvas context methods required by three.js
-const getContextStub = vi.fn(() => ({ getExtension: () => null }));
+// Stub WebGL context to satisfy float texture requirements
+class FakeWebGL2Context {
+  getExtension(_name: string): unknown {
+    return {};
+  }
+}
+(globalThis as any).WebGL2RenderingContext = FakeWebGL2Context;
+/** Track canvas context requests and provide a fake WebGL2 context. */
+const getContextStub = vi.fn(() => new FakeWebGL2Context());
 (HTMLCanvasElement.prototype as any).getContext = getContextStub;
 
 import { Spectrogram, SpectrogramAPI, SpectroMeta, DEFAULT_BG } from './index';
