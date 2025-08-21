@@ -57,17 +57,35 @@ const DEFAULT_BIN_COUNT = 1025;
 const DEFAULT_MAX_ROWS = 512;
 
 /**
+ * Ensure a numeric field is a whole number within range.
+ * What: Guards all count-based metadata values.
+ * Why: Fractions would produce incorrect buffer sizes or misaligned frames.
+ * How: Validates finiteness, integer-ness, and minimum bound.
+ */
+function assertInteger(value: number, name: string, min: number): void {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${name} must be finite`);
+  }
+  if (!Number.isInteger(value)) {
+    throw new Error(`${name} must be an integer, received ${value}`);
+  }
+  if (value < min) {
+    throw new Error(`${name} must be >= ${min}, received ${value}`);
+  }
+}
+
+/**
  * Validate incoming spectrogram metadata and fail fast on invalid values.
  * What: Ensures the stream configuration is sane before allocating GPU memory.
  * Why: Prevents subtle bugs or crashes stemming from impossible parameters.
  */
 function validateMeta(meta: SpectroMeta): void {
   if (!meta.streamId) throw new Error('streamId is required');
-  if (!Number.isFinite(meta.channels) || meta.channels < MIN_CHANNELS) throw new Error('Invalid channel count');
-  if (!Number.isFinite(meta.sampleRateHz) || meta.sampleRateHz < MIN_SAMPLE_RATE_HZ) throw new Error('Invalid sample rate');
-  if (!Number.isFinite(meta.nfft) || meta.nfft < MIN_NFFT) throw new Error('Invalid FFT size');
-  if (!Number.isFinite(meta.hopSize) || meta.hopSize < MIN_HOP_SIZE) throw new Error('Invalid hop size');
-  if (!Number.isFinite(meta.binCount) || meta.binCount < MIN_BIN_COUNT) throw new Error('Invalid bin count');
+  assertInteger(meta.channels, 'channels', MIN_CHANNELS);
+  assertInteger(meta.sampleRateHz, 'sampleRateHz', MIN_SAMPLE_RATE_HZ);
+  assertInteger(meta.nfft, 'nfft', MIN_NFFT);
+  assertInteger(meta.hopSize, 'hopSize', MIN_HOP_SIZE);
+  assertInteger(meta.binCount, 'binCount', MIN_BIN_COUNT);
   if (!Number.isFinite(meta.freqStartHz) || meta.freqStartHz < MIN_FREQ_START_HZ) throw new Error('Invalid start frequency');
   if (!Number.isFinite(meta.freqStepHz) || meta.freqStepHz < MIN_FREQ_STEP_HZ) throw new Error('Invalid frequency step');
   if (!(meta.scale === 'dbfs' || meta.scale === 'linear')) throw new Error(`Invalid scale ${meta.scale}`);
