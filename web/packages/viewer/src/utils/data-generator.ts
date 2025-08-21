@@ -33,6 +33,13 @@ export const DEFAULT_CONFIG: SignalConfig = {
  */
 const MAX_AMPLITUDE = 1.0;
 
+/**
+ * Value used to pad incomplete analysis windows.
+ * What: Explicit zero constant to avoid magic numbers when padding.
+ * Why: Clarifies intent and centralizes padding behavior.
+ */
+const ZERO_PAD_VALUE = 0;
+
 /** Types of realistic audio signals. */
 export type SignalType = 
   | 'music' 
@@ -284,32 +291,54 @@ export async function generateSTFTFrames(
   config: SignalConfig,
   frameCount: number = 100
 ): Promise<Array<{ bins: Float32Array; timestamp: number }>> {
+  if (!(signal instanceof Float32Array)) {
+    throw new Error('signal must be a Float32Array');
+  }
+  if (frameCount <= 0) {
+    throw new Error('frameCount must be positive');
+  }
+  if (config.sampleRate <= 0) {
+    throw new Error('sampleRate must be positive');
+  }
+  if (config.windowSize <= 0) {
+    throw new Error('windowSize must be positive');
+  }
+  if (config.hopSize <= 0) {
+    throw new Error('hopSize must be positive');
+  }
+
+  /** Frames produced by the STFT. */
   const frames: Array<{ bins: Float32Array; timestamp: number }> = [];
+  /** Number of samples to advance between frames. */
   const hopSamples = config.hopSize;
+  /** Size of each analysis window in samples. */
   const windowSamples = config.windowSize;
-  
+  /**
+   * Reusable buffer holding the current window of samples.
+   * Why: avoids per-frame allocations for performance.
+   */
+  const windowData = new Float32Array(windowSamples);
+
   for (let i = 0; i < frameCount; i++) {
     const startSample = i * hopSamples;
-    const endSample = Math.min(startSample + windowSamples, signal.length);
-    
-    if (endSample <= startSample) break;
-    
-    // Extract window of samples
-    const windowData = new Float32Array(windowSamples);
-    for (let j = 0; j < windowSamples; j++) {
-      const sampleIndex = startSample + j;
-      windowData[j] = sampleIndex < signal.length ? signal[sampleIndex] : 0;
+    if (startSample >= signal.length) break;
+
+    // Copy available samples and zero-pad remainder.
+    const copyLength = Math.min(windowSamples, signal.length - startSample);
+    windowData.set(signal.subarray(startSample, startSample + copyLength));
+    if (copyLength < windowSamples) {
+      windowData.fill(ZERO_PAD_VALUE, copyLength);
     }
-    
+
     // Process through WASM
     const bins = await stftFrame(windowData, config.windowType, config.reference);
-    
+
     frames.push({
       bins,
       timestamp: startSample / config.sampleRate
     });
   }
-  
+
   return frames;
 }
 
