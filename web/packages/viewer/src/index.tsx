@@ -193,6 +193,20 @@ export interface SpectroConfig {
   autoGenerate?: boolean;
 }
 
+/**
+ * Hooks and logging options for synthetic data generation.
+ * What: Allows consumers to observe progress and capture errors.
+ * Why: Replaces internal console usage with pluggable callbacks or loggers.
+ */
+export interface GenerateDataOptions {
+  /** Called after frames are generated to report counts and type. */
+  onProgress?(p: { frameCount: number; type: string }): void;
+  /** Receives any error thrown during generation. */
+  onError?(error: unknown): void;
+  /** Optional logger with info and error methods. */
+  logger?: { info?(msg: string): void; error?(msg: string, err: unknown): void };
+}
+
 /** Public runtime API exposed by the component. */
 export interface SpectrogramAPI {
   setConfig(next: Partial<SpectroConfig>): void;
@@ -204,8 +218,8 @@ export interface SpectrogramAPI {
   resize(): void;
   exportPNG(opts?: { view?: ViewMode }): Promise<Blob>;
   stats(): { fps: number; dropped: number; rows: number; bins: number };
-  /** Generate new data */
-  generateData(type?: SignalType | 'mixed' | 'music' | 'realistic'): Promise<void>;
+  /** Generate new synthetic data with optional progress and error hooks. */
+  generateData(type?: SignalType | 'mixed' | 'music' | 'realistic', opts?: GenerateDataOptions): Promise<void>;
 }
 
 /** Props for the Spectrogram React component. */
@@ -375,9 +389,29 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     /* c8 ignore start */
     // Data synthesis for demos; excluded from coverage as it is deterministic
     // and heavy to execute in unit tests.
-    generateData: async (type) => {
+    generateData: async (type, opts = {}) => {
       if (!ringBufferRef.current) return;
 
+      // Validate callback and logger inputs to fail fast on misuse
+      if (opts.onProgress && typeof opts.onProgress !== 'function') {
+        throw new Error('onProgress must be a function');
+      }
+      if (opts.onError && typeof opts.onError !== 'function') {
+        throw new Error('onError must be a function');
+      }
+      if (opts.logger) {
+        const { info, error } = opts.logger as any;
+        if (info && typeof info !== 'function') throw new Error('logger.info must be a function');
+        if (error && typeof error !== 'function') throw new Error('logger.error must be a function');
+      }
+
+      const dataType = type || currentConfig.dataType || 'realistic';
+      const duration = currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
+
+      try {
+        let frames: Array<{ bins: Float32Array; timestamp: number }> = [];
+
+        if (dataType === 'realistic') {
         const dataType = type || currentConfig.dataType || 'realistic';
         const duration = currentConfig.dataDuration ?? DEFAULT_DATA_DURATION_SECONDS;
 
@@ -389,10 +423,6 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         // Total STFT frames derived from duration and synthetic frame rate.
         const frameCount = Math.floor(duration * SYNTHETIC_FRAME_RATE);
 
-        try {
-          let frames: Array<{ bins: Float32Array; timestamp: number }> = [];
-
-          if (dataType === 'realistic') {
           // Generate varied realistic data
           const realisticFrames = await generateRealisticSpectrogramData(
             DEFAULT_CONFIG,
@@ -440,17 +470,21 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
             Math.floor(duration * DEFAULT_GENERATED_FPS)
           );
         }
-        
+
         // Push frames to ring buffer
         frames.forEach(frame => {
           ringBufferRef.current?.pushRow(frame.bins);
         });
+
+        opts.logger?.info?.(`Generated ${frames.length} frames of ${dataType} data`);
+        opts.onProgress?.({ frameCount: frames.length, type: dataType });
         
         if (ENABLE_DEBUG_LOGS) {
           console.log(`Generated ${frames.length} frames of ${dataType} data`);
         }
       } catch (error) {
-        console.error('Failed to generate data:', error);
+        opts.logger?.error?.('Failed to generate data', error);
+        opts.onError?.(error);
       }
     }
     /* c8 ignore end */

@@ -1,9 +1,20 @@
 import React from 'react';
 import { render, act } from '@testing-library/react';
 import { vi } from 'vitest';
+import { generateRealisticSpectrogramData } from './utils/data-generator';
 
 // Mock WASM bindings to avoid requiring compiled artifacts during tests
 vi.mock('@spectro/wasm-bindings', () => ({}), { virtual: true });
+
+// Mock data generation utilities to avoid heavy computations
+vi.mock('./utils/data-generator', () => ({
+  DEFAULT_CONFIG: { sampleRate: 1 },
+  generateRealisticSpectrogramData: vi.fn(),
+  generateSignalByType: vi.fn(),
+  generateMusicSignal: vi.fn(),
+  generateMixedSignal: vi.fn(),
+  generateSTFTFrames: vi.fn(),
+}));
 
 // Polyfill ResizeObserver for @react-three/fiber
 class ResizeObserverMock {
@@ -178,4 +189,67 @@ it('creates WebGL context only once', async () => {
     await new Promise(res => setTimeout(res, 0));
   });
   expect(getContextStub.mock.calls.length).toBeLessThanOrEqual(1);
+});
+
+/**
+ * Verify generateData reports progress through callbacks and logger.
+ * What: Ensures synthetic generation communicates frame counts.
+ * Why: Allows consumers to track work without relying on console output.
+ */
+it('invokes progress and logger callbacks on successful generation', async () => {
+  const frames = [
+    { bins: new Float32Array([0]), timestamp: 0 },
+    { bins: new Float32Array([0]), timestamp: 1 }
+  ];
+  vi.mocked(generateRealisticSpectrogramData).mockResolvedValueOnce(frames as any);
+
+  let api: SpectrogramAPI | null = null;
+  render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} onReady={a => (api = a)} />);
+  await act(async () => {
+    await new Promise(res => setTimeout(res, 0));
+  });
+  if (!api) throw new Error('API not initialized');
+
+  act(() => api!.setMeta(makeMeta({ binCount: 1 }))); // ensure ring buffer matches frame bins
+
+  const onProgress = vi.fn();
+  const logger = { info: vi.fn(), error: vi.fn() };
+
+  await act(async () => {
+    await api!.generateData('realistic', { onProgress, logger });
+  });
+
+  expect(onProgress).toHaveBeenCalledWith({ frameCount: frames.length, type: 'realistic' });
+  expect(logger.info).toHaveBeenCalledTimes(1);
+  expect(logger.error).not.toHaveBeenCalled();
+});
+
+/**
+ * Ensure errors during generation are surfaced via hooks.
+ * What: Simulates a failing generator to test onError handling.
+ * Why: Consumers must receive explicit failure signals instead of silent console output.
+ */
+it('invokes error callback and logger on failure', async () => {
+  const testError = new Error('boom');
+  vi.mocked(generateRealisticSpectrogramData).mockRejectedValueOnce(testError);
+
+  let api: SpectrogramAPI | null = null;
+  render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} onReady={a => (api = a)} />);
+  await act(async () => {
+    await new Promise(res => setTimeout(res, 0));
+  });
+  if (!api) throw new Error('API not initialized');
+
+  act(() => api!.setMeta(makeMeta({ binCount: 1 }))); // ring buffer compatible
+
+  const onError = vi.fn();
+  const logger = { info: vi.fn(), error: vi.fn() };
+
+  await act(async () => {
+    await api!.generateData('realistic', { onError, logger }).catch(() => {});
+  });
+
+  expect(onError).toHaveBeenCalledWith(testError);
+  expect(logger.error).toHaveBeenCalledWith('Failed to generate data', testError);
+  expect(logger.info).not.toHaveBeenCalled();
 });
