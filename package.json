@@ -14,7 +14,7 @@
     "test:visual": "pnpm -r --filter './web/apps/*' run test:visual",
     "lint": "pnpm -r --filter './web/packages/*' run lint",
     "format": "pnpm -r --filter './web/packages/*' run format",
-    "typecheck": "pnpm -r --filter './web/packages/*' --if-present run typecheck",
+    "typecheck": "pnpm -r --filter './web/packages/*' run typecheck",
     "clean": "rm -rf web/packages/*/dist web/apps/*/dist web/crates/*/target web/crates/*/pkg node_modules/.vite",
     "clean:wasm": "rm -rf web/crates/*/target web/crates/*/pkg",
     "setup": "pnpm install && rustup target add wasm32-unknown-unknown && pnpm build:wasm",

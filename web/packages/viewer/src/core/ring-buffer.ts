@@ -1,14 +1,14 @@
 /**
  * GPU ring buffer for spectrogram data management.
- * What: Manages a circular buffer of spectrogram rows stored in GPU memory.
- * Why: Allows efficient streaming updates without reallocating textures.
+ * What: Maintains a circular buffer of spectrogram rows in CPU and GPU memory.
+ * Why: Enables efficient streaming without reallocating textures.
  */
 import * as THREE from 'three';
 
 /**
  * Mapping from configuration format to THREE.js texture data type.
- * What: Associates each supported sample format with its WebGL texture type.
- * Why: Ensures created textures have correct precision to avoid GPU/CPU mismatches.
+ * What: Associates each supported sample format with the corresponding WebGL texture type.
+ * Why: Guarantees textures are created with correct precision to match CPU data.
  */
 const TEXTURE_TYPE_BY_FORMAT: Record<RingBufferConfig['format'], THREE.TextureDataType> = {
   R32F: THREE.FloatType,
@@ -21,9 +21,7 @@ const UINT8_MAX = 255;
 /** Maximum unsigned 16-bit integer value for normalization. */
 const UINT16_MAX = 65535;
 
-/**
- * Configuration describing the ring buffer dimensions and format.
- */
+/** Configuration describing ring buffer behaviour. */
 export interface RingBufferConfig {
   /** Number of frequency bins per row. */
   binCount: number;
@@ -37,6 +35,8 @@ export interface RingBufferConfig {
 
 /**
  * GPU ring buffer for spectrogram data.
+ * What: Streams spectrogram rows into a persistent texture.
+ * Why: Avoids per-frame allocations and minimizes memory copies.
  */
 export class SpectroRingBuffer {
   /** WebGL context used for capability checks. */
@@ -45,9 +45,9 @@ export class SpectroRingBuffer {
   private texture: THREE.DataTexture;
   /** CPU-side data buffer. */
   private data: Float32Array | Uint8Array;
-  /** Scratch buffer reused for numeric conversions. */
+  /** Scratch buffer reused for numeric conversion to avoid allocations. */
   private scratch: Float32Array;
-  /** Next row index to be written. */
+  /** Index of next row to write. */
   private writeRow = 0;
   /** Number of rows currently stored. */
   private rowCount = 0;
@@ -55,15 +55,20 @@ export class SpectroRingBuffer {
   private config: RingBufferConfig;
 
   /**
-   * Initialize the ring buffer and allocate resources.
-   * @param gl - WebGL context used for texture uploads.
-   * @param config - Size and format configuration.
+   * Initialize the ring buffer and underlying texture.
    */
   constructor(gl: WebGLRenderingContext, config: RingBufferConfig) {
     this.gl = gl;
     this.config = { ...config };
+    const { binCount, maxRows } = this.config;
+    this.data = this.createDataArray(binCount * maxRows);
+    this.scratch = new Float32Array(binCount);
+    this.texture = this.createTexture(this.data, binCount, maxRows);
+  }
 
-    // Allocate CPU-side storage tailored to the texture format.
+  /**
+   * Allocate CPU storage matching the configured texture format.
+
     this.data = this.createDataArray(config.binCount * config.maxRows);
     // Prepare scratch space once to avoid per-call allocations.
     this.scratch = new Float32Array(config.binCount);
@@ -118,11 +123,8 @@ export class SpectroRingBuffer {
   }
 
   /**
-   * Construct a THREE.js DataTexture for the ring buffer.
-   * @param data - Initial texture data.
-   * @param width - Number of frequency bins.
-   * @param height - Maximum number of rows.
-   * @returns Configured DataTexture ready for updates.
+   * Construct a THREE.js DataTexture with proper parameters.
+
    */
   private createTexture(
     data: Float32Array | Uint8Array,
@@ -136,7 +138,6 @@ export class SpectroRingBuffer {
       THREE.RedFormat,
       TEXTURE_TYPE_BY_FORMAT[this.config.format]
     );
-
     texture.generateMipmaps = false;
     texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -148,6 +149,8 @@ export class SpectroRingBuffer {
   }
 
   /**
+   * Push a row of bins into the ring buffer.
+   * How: Validates size and converts input to the underlying storage format.
    * Expose the internal texture for rendering.
    */
   getTexture(): THREE.DataTexture {
@@ -161,11 +164,12 @@ export class SpectroRingBuffer {
   pushRow(bins: Float32Array | Uint16Array | Uint8Array): void {
     const { binCount, maxRows, format } = this.config;
 
-    // Validate bin count to prevent silent memory corruption.
     if (bins.length !== binCount) {
       throw new Error(`Expected ${binCount} bins, received ${bins.length}.`);
     }
 
+    // Prepare float representation regardless of input type.
+    /** Temporary float view of incoming bins. */
     // Ensure provided array matches the configured texture format.
     if (format === 'UNORM8' && !(bins instanceof Uint8Array)) {
       throw new Error('UNORM8 format requires Uint8Array input.');
@@ -190,9 +194,19 @@ export class SpectroRingBuffer {
       floatBins = this.scratch;
     }
 
-    // Copy data into ring buffer storage.
+    // Write data into backing array without extra allocations.
     const offset = this.writeRow * binCount;
-    this.data.set(floatBins, offset);
+    if (this.data instanceof Float32Array) {
+      this.data.set(floatBins, offset);
+    } else if (this.data instanceof Uint8Array) {
+      for (let i = 0; i < binCount; i++) {
+        this.data[offset + i] = Math.round(floatBins[i] * UINT8_MAX);
+      }
+    }
+
+    this.writeRow = (this.writeRow + 1) % maxRows;
+    this.rowCount = Math.min(this.rowCount + 1, maxRows);
+
 
     // Upload the row to GPU texture.
     const gl = this.gl;
@@ -223,14 +237,11 @@ export class SpectroRingBuffer {
     this.rowCount = Math.min(this.rowCount + 1, maxRows);
 
 
-    // Mark texture for upload to GPU on next render.
     this.texture.needsUpdate = true;
   }
 
   /**
-   * Clear all data in the ring buffer.
-   * What: Resets the buffer to empty state.
-   * Why: Allows clean restart of data collection.
+   * Clear all stored rows.
    */
   clear(): void {
     this.data.fill(0);
@@ -240,18 +251,14 @@ export class SpectroRingBuffer {
   }
 
   /**
-   * Get the current GPU texture.
-   * What: Returns the WebGL texture for rendering.
-   * Why: Enables efficient GPU sampling in shaders.
+   * Retrieve underlying GPU texture for rendering.
    */
   getTexture(): THREE.DataTexture {
     return this.texture;
   }
 
   /**
-   * Get current buffer statistics.
-   * What: Returns metadata about the buffer state.
-   * Why: Enables monitoring and debugging of data flow.
+   * Report current buffer statistics for monitoring.
    */
   getStats(): { rowCount: number; writeRow: number; maxRows: number; binCount: number } {
     return {
@@ -263,16 +270,12 @@ export class SpectroRingBuffer {
   }
 
   /**
-   * Resize the ring buffer.
-   * What: Changes buffer dimensions and reallocates memory.
-   * Why: Allows dynamic adjustment based on performance or requirements.
+   * Resize buffer dimensions and recreate texture.
    */
   resize(binCount: number, maxRows: number): void {
     if (binCount === this.config.binCount && maxRows === this.config.maxRows) {
       return; // No change needed.
     }
-
-    // Reallocate CPU buffer and recreate GPU texture.
     this.data = this.createDataArray(binCount * maxRows);
     this.scratch = new Float32Array(binCount);
     this.texture.dispose();
@@ -286,9 +289,7 @@ export class SpectroRingBuffer {
   }
 
   /**
-   * Dispose of GPU resources.
-   * What: Cleans up WebGL textures and memory.
-   * Why: Prevents memory leaks when component unmounts.
+   * Release GPU resources held by this buffer.
    */
   dispose(): void {
     this.texture.dispose();
