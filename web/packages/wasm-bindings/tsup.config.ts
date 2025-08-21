@@ -6,9 +6,5 @@ export default defineConfig({
   dts: true,
   splitting: false,
   sourcemap: true,
-  clean: true,
-  loader: {
-    '.wasm': 'copy'
-  },
-  external: ['../../../crates/dsp_core/pkg/spectro_dsp_bg.wasm']
+  clean: true
 });
