@@ -153,3 +153,87 @@ test('WASM bindings execute and validate inputs', async () => {
   await assert.rejects(() => stftFrame(new Float32Array([1]), 'hann', 0));
   await assert.rejects(() => magnitudeDbfs(new Float32Array([1]), -1));
 });
+
+/**
+ * Ensure WASM functions do not mutate inputs and returned arrays stay stable
+ * across subsequent calls. Why: the bindings previously copied results via
+ * `.slice()` to guard against aliasing; this test proves direct returns are
+ * safe.
+ */
+test('WASM outputs are immutable and inputs remain unchanged', async () => {
+  await initWasm();
+
+  /**
+   * Generic checker to assert that a function neither mutates its input nor
+   * returns a buffer that aliases mutable WASM memory.
+   */
+  async function expectIsolated(
+    fn: (...args: any[]) => Promise<Float32Array>, // eslint-disable-line @typescript-eslint/no-explicit-any
+    args: any[], // eslint-disable-line @typescript-eslint/no-explicit-any
+    altArgs: any[], // eslint-disable-line @typescript-eslint/no-explicit-any
+  ) {
+    const input = args[0] as Float32Array;
+    const inputSnapshot = new Float32Array(input);
+    const out = await fn(...args);
+    const outSnapshot = new Float32Array(out);
+    await fn(...altArgs);
+    assert.deepEqual(out, outSnapshot, 'output should remain unchanged');
+    assert.deepEqual(input, inputSnapshot, 'input should remain unchanged');
+  }
+
+  /** Buffer of zeros used for alternate calls that may overwrite WASM memory. */
+  const zeros = new Float32Array(makeInput().length);
+
+  await expectIsolated(fftReal, [makeInput()], [zeros]);
+  await expectIsolated(applyWindow, [makeInput(), 'hann'], [zeros, 'hann']);
+  await expectIsolated(stftFrame, [makeInput(), 'hann'], [zeros, 'hann']);
+  await expectIsolated(magnitudeDbfs, [makeInput()], [zeros]);
+  // --- fftReal ---
+  const input = makeInput();
+  const first = await fftReal(input);
+  const expectedFft = first.slice();
+  const fftOut = new Float32Array(first.length);
+  const fftWithOut = await fftReal(input, fftOut);
+  assert.strictEqual(fftWithOut, fftOut);
+  assert.deepEqual(fftOut, expectedFft);
+  await assert.rejects(() => fftReal(input, new Float32Array(fftOut.length + 1)));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await assert.rejects(() => fftReal(input, {} as any));
+
+  // --- applyWindow ---
+  const winFirst = await applyWindow(input, 'hann');
+  const expectedWin = winFirst.slice();
+  const winOut = new Float32Array(winFirst.length);
+  const winWithOut = await applyWindow(input, 'hann', winOut);
+  assert.strictEqual(winWithOut, winOut);
+  assert.deepEqual(winOut, expectedWin);
+  await assert.rejects(() => applyWindow(input, 'hann', new Float32Array(winOut.length + 1)));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await assert.rejects(() => applyWindow(input, 'hann', {} as any));
+
+  // --- stftFrame ---
+  const stftFirst = await stftFrame(input, 'hann');
+  const expectedStft = stftFirst.slice();
+  const stftOut = new Float32Array(stftFirst.length);
+  const stftWithOut = await stftFrame(input, 'hann', undefined, stftOut);
+  assert.strictEqual(stftWithOut, stftOut);
+  assert.deepEqual(stftOut, expectedStft);
+  await assert.rejects(() =>
+    stftFrame(input, 'hann', 1.0, new Float32Array(stftOut.length + 1)),
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await assert.rejects(() => stftFrame(input, 'hann', 1.0, {} as any));
+
+  // --- magnitudeDbfs ---
+  const magFirst = await magnitudeDbfs(input);
+  const expectedMag = magFirst.slice();
+  const magOut = new Float32Array(magFirst.length);
+  const magWithOut = await magnitudeDbfs(input, undefined, magOut);
+  assert.strictEqual(magWithOut, magOut);
+  assert.deepEqual(magOut, expectedMag);
+  await assert.rejects(() =>
+    magnitudeDbfs(input, 1.0, new Float32Array(magOut.length + 1)),
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await assert.rejects(() => magnitudeDbfs(input, 1.0, {} as any));
+});

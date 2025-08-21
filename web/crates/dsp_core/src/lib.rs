@@ -49,6 +49,18 @@ const BLACKMAN_A0: f32 = 0.42;
 const BLACKMAN_A1: f32 = 0.5;
 const BLACKMAN_A2: f32 = 0.08;
 
+/// Validate that all elements in `input` are finite.
+///
+/// # Why
+/// NaN or infinite values would corrupt downstream DSP calculations and
+/// generally indicate invalid upstream data. Failing fast prevents
+/// propagating these bad values.
+fn validate_finite(input: &[f32]) {
+    if input.iter().any(|v| !v.is_finite()) {
+        panic!("input contains non-finite values");
+    }
+}
+
 // Set panic hook for better error messages in wasm
 #[wasm_bindgen(start)]
 pub fn init_panic_hook() {
@@ -66,12 +78,15 @@ pub fn init_panic_hook() {
 /// fast \(O(n \log n)\) FFT for significant performance gains.
 #[wasm_bindgen]
 pub fn fft_real(input: &[f32]) -> Vec<f32> {
+    validate_finite(input);
+    fft_real_unchecked(input)
+}
+
+/// Internal FFT implementation that assumes `input` is finite.
+fn fft_real_unchecked(input: &[f32]) -> Vec<f32> {
     let n = input.len();
     if n == 0 {
         return Vec::new();
-    }
-    if input.iter().any(|v| !v.is_finite()) {
-        panic!("fft_real: input contains non-finite values");
     }
 
     // Convert real input into complex numbers required by `rustfft`.
@@ -98,10 +113,13 @@ pub fn fft_real(input: &[f32]) -> Vec<f32> {
 /// Why: Reduces spectral leakage in FFT analysis.
 #[wasm_bindgen]
 pub fn apply_window(input: &[f32], window_type: &str) -> Vec<f32> {
+    validate_finite(input);
+    apply_window_unchecked(input, window_type)
+}
+
+/// Apply window coefficients without validating `input`.
+fn apply_window_unchecked(input: &[f32], window_type: &str) -> Vec<f32> {
     let n = input.len();
-    if input.iter().any(|v| !v.is_finite()) {
-        panic!("apply_window: input contains non-finite values");
-    }
     let mut output = vec![0.0f32; n];
     let denom = (n as f32 - 1.0).max(1.0);
     match window_type {
@@ -135,17 +153,21 @@ pub fn apply_window(input: &[f32], window_type: &str) -> Vec<f32> {
 /// Why: Single call reduces JS↔WASM boundary crossings for performance.
 #[wasm_bindgen]
 pub fn stft_frame(input: &[f32], window_type: &str, reference: f32) -> Vec<f32> {
-    let windowed = apply_window(input, window_type);
-    magnitude_dbfs(&windowed, reference)
+    validate_finite(input);
+    let windowed = apply_window_unchecked(input, window_type);
+    magnitude_dbfs_unchecked(&windowed, reference)
 }
 
 /// Compute magnitude spectrum in dBFS from a real block. Windowing is expected to be done by caller.
 #[wasm_bindgen]
 pub fn magnitude_dbfs(input: &[f32], reference: f32) -> Vec<f32> {
-    if input.iter().any(|v| !v.is_finite()) {
-        panic!("magnitude_dbfs: input contains non-finite values");
-    }
-    let spec = fft_real(input);
+    validate_finite(input);
+    magnitude_dbfs_unchecked(input, reference)
+}
+
+/// Compute magnitude spectrum without validating `input`.
+fn magnitude_dbfs_unchecked(input: &[f32], reference: f32) -> Vec<f32> {
+    let spec = fft_real_unchecked(input);
     let mut mags = Vec::with_capacity(spec.len() / 2);
     let mut i = 0usize;
     let safe_ref = reference.max(EPSILON);
@@ -269,5 +291,23 @@ mod tests {
             cached_time < uncached_time,
             "cached planner {cached_time:?} >= new planner {uncached_time:?}"
         );
+    }
+
+    /// Ensure `validate_finite` rejects non-finite input.
+    #[test]
+    #[should_panic(expected = "input contains non-finite values")]
+    fn validate_finite_panics_on_nan() {
+        validate_finite(&[0.0, f32::NAN]);
+    }
+
+    /// Verify the STFT pipeline matches manual window + magnitude calculation.
+    #[test]
+    fn stft_frame_matches_manual_pipeline() {
+        let data: Vec<f32> = (0..16).map(|i| i as f32).collect();
+        let expected = magnitude_dbfs(&apply_window(&data, "hann"), 1.0);
+        let result = stft_frame(&data, "hann", 1.0);
+        for (a, b) in result.iter().zip(expected.iter()) {
+            assert!((a - b).abs() < TOLERANCE, "{a} vs {b}");
+        }
     }
 }

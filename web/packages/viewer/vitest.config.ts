@@ -27,6 +27,8 @@ export default defineConfig({
         'src/core/ring-buffer.ts',
         // Include utility generators to ensure they maintain test coverage
         'src/utils/data-generator.ts',
+        // Include legend UI to track validation logic
+        'src/ui/legend.tsx',
       ],
       lines: 50,
       functions: 50,
