@@ -11,6 +11,8 @@
     // Include Vitest global types so test files type-check correctly.
     "types": ["vitest/globals"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Exclude test sources to avoid requiring vitest globals during library type checking.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/__tests__/**/*"]
 }
 
