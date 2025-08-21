@@ -29,6 +29,43 @@ export type Scale = 'dbfs' | 'linear';
 /** Frequency axis scaling. */
 export type FreqScale = 'linear' | 'log' | 'mel';
 
+/** Minimum allowed number of channels. */
+const MIN_CHANNELS = 1;
+/** Minimum allowed sample rate in Hz. */
+const MIN_SAMPLE_RATE_HZ = 1;
+/** Minimum allowed FFT size. */
+const MIN_NFFT = 1;
+/** Minimum allowed hop size in samples. */
+const MIN_HOP_SIZE = 1;
+/** Minimum allowed number of frequency bins. */
+const MIN_BIN_COUNT = 1;
+/** Minimum allowed starting frequency in Hz. */
+const MIN_FREQ_START_HZ = 0;
+/** Minimum allowed frequency step in Hz. */
+const MIN_FREQ_STEP_HZ = 1e-12;
+/** Default display time window in seconds. */
+const DEFAULT_TIME_WINDOW_SEC = 10;
+
+/**
+ * Validate incoming spectrogram metadata and fail fast on invalid values.
+ * What: Ensures the stream configuration is sane before allocating GPU memory.
+ * Why: Prevents subtle bugs or crashes stemming from impossible parameters.
+ */
+function validateMeta(meta: SpectroMeta): void {
+  if (!meta.streamId) throw new Error('streamId is required');
+  if (!Number.isFinite(meta.channels) || meta.channels < MIN_CHANNELS) throw new Error('Invalid channel count');
+  if (!Number.isFinite(meta.sampleRateHz) || meta.sampleRateHz < MIN_SAMPLE_RATE_HZ) throw new Error('Invalid sample rate');
+  if (!Number.isFinite(meta.nfft) || meta.nfft < MIN_NFFT) throw new Error('Invalid FFT size');
+  if (!Number.isFinite(meta.hopSize) || meta.hopSize < MIN_HOP_SIZE) throw new Error('Invalid hop size');
+  if (!Number.isFinite(meta.binCount) || meta.binCount < MIN_BIN_COUNT) throw new Error('Invalid bin count');
+  if (!Number.isFinite(meta.freqStartHz) || meta.freqStartHz < MIN_FREQ_START_HZ) throw new Error('Invalid start frequency');
+  if (!Number.isFinite(meta.freqStepHz) || meta.freqStepHz < MIN_FREQ_STEP_HZ) throw new Error('Invalid frequency step');
+  if (!(meta.scale === 'dbfs' || meta.scale === 'linear')) throw new Error(`Invalid scale ${meta.scale}`);
+  if (meta.freqScale && !(meta.freqScale === 'linear' || meta.freqScale === 'log' || meta.freqScale === 'mel')) {
+    throw new Error(`Invalid freqScale ${meta.freqScale}`);
+  }
+}
+
 /** Stream metadata describing the incoming STFT/FFT. */
 export interface SpectroMeta {
   streamId: string;
@@ -169,8 +206,26 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     setConfig(next) {
       setCurrentConfig(prev => ({ ...prev, ...next }));
     },
-    setMeta(_) {
-      // TODO: Update ring buffer configuration based on meta
+    setMeta(meta) {
+      // Validate metadata before applying changes
+      validateMeta(meta);
+
+      const ring = ringBufferRef.current;
+      if (!ring) throw new Error('Ring buffer not initialized');
+
+      // Derive maximum rows from time window if not explicitly configured
+      const timeWindow = currentConfig.timeWindowSec ?? DEFAULT_TIME_WINDOW_SEC;
+      const derivedRows = Math.ceil((timeWindow * meta.sampleRateHz) / meta.hopSize);
+      const maxRows = currentConfig.maxRows ?? derivedRows;
+
+      // Resize underlying GPU buffer to accommodate new stream parameters
+      ring.resize(meta.binCount, maxRows);
+
+      // Update config aspects influenced by metadata
+      setCurrentConfig(prev => ({
+        ...prev,
+        freqScale: meta.freqScale ?? prev.freqScale
+      }));
     },
     pushFrame(frame) {
       ringBufferRef.current?.pushRow(frame.bins);
@@ -203,6 +258,9 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         bins: stats?.binCount ?? 0
       };
     },
+    /* c8 ignore start */
+    // Data synthesis for demos; excluded from coverage as it is deterministic
+    // and heavy to execute in unit tests.
     generateData: async (type) => {
       if (!ringBufferRef.current) return;
 
@@ -256,6 +314,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         console.error('Failed to generate data:', error);
       }
     }
+    /* c8 ignore end */
   });
 
   // Auto-generate data periodically

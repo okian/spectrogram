@@ -26,6 +26,13 @@ export const DEFAULT_CONFIG: SignalConfig = {
   reference: 1.0
 };
 
+/**
+ * Maximum allowed signal amplitude before normalization.
+ * What: Defines clipping threshold for generated audio.
+ * Why: Eliminates magic numbers and centralizes normalization constant.
+ */
+const MAX_AMPLITUDE = 1.0;
+
 /** Types of realistic audio signals. */
 export type SignalType = 
   | 'music' 
@@ -348,29 +355,47 @@ export async function generateRealisticSpectrogramData(
  * Generate a mixed signal with multiple simultaneous sources.
  * What: Creates complex audio with overlapping frequency content
  * Why: Tests spectrogram's ability to show multiple simultaneous signals
+ * How: Mixes individually generated signals and normalizes to prevent clipping.
+ * @param signalGenerator Optional injection of signal generator for testing.
  */
 export function generateMixedSignal(
   length: number,
   sampleRate: number,
-  sources: Array<{ type: SignalType; amplitude: number }>
+  sources: Array<{ type: SignalType; amplitude: number }>,
+  signalGenerator: (length: number, sampleRate: number, type: SignalType) => Float32Array = generateSignalByType
 ): Float32Array {
+  if (length <= 0) {
+    throw new Error('length must be positive');
+  }
+  if (sampleRate <= 0) {
+    throw new Error('sampleRate must be positive');
+  }
+  if (!Array.isArray(sources) || sources.length === 0) {
+    throw new Error('sources array must contain at least one element');
+  }
+
   const mixedSignal = new Float32Array(length);
-  
-  sources.forEach(source => {
-    const sourceSignal = generateSignalByType(length, sampleRate, source.type);
+  let maxAbs = 0;
+
+  for (const source of sources) {
+    const sourceSignal = signalGenerator(length, sampleRate, source.type);
+    const amplitude = source.amplitude;
     for (let i = 0; i < length; i++) {
-      mixedSignal[i] += sourceSignal[i] * source.amplitude;
-    }
-  });
-  
-  // Normalize to prevent clipping
-  const maxAmplitude = Math.max(...Array.from(mixedSignal).map(Math.abs));
-  if (maxAmplitude > 1.0) {
-    for (let i = 0; i < length; i++) {
-      mixedSignal[i] /= maxAmplitude;
+      mixedSignal[i] += sourceSignal[i] * amplitude;
+      const absVal = Math.abs(mixedSignal[i]);
+      if (absVal > maxAbs) {
+        maxAbs = absVal;
+      }
     }
   }
-  
+
+  if (maxAbs > MAX_AMPLITUDE) {
+    const scale = 1 / maxAbs;
+    for (let i = 0; i < length; i++) {
+      mixedSignal[i] *= scale;
+    }
+  }
+
   return mixedSignal;
 }
 
