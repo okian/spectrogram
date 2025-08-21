@@ -14,7 +14,8 @@ class ResizeObserverMock {
 (global as any).ResizeObserver = ResizeObserverMock;
 
 // Stub canvas context methods required by three.js
-(HTMLCanvasElement.prototype as any).getContext = () => ({ getExtension: () => null });
+const getContextStub = vi.fn(() => ({ getExtension: () => null }));
+(HTMLCanvasElement.prototype as any).getContext = getContextStub;
 
 import { Spectrogram, SpectrogramAPI, SpectroMeta, DEFAULT_BG } from './index';
 
@@ -56,12 +57,12 @@ describe('Spectrogram metadata handling', () => {
   it('resizes ring buffer and updates stats on meta change', async () => {
     let api: SpectrogramAPI | null = null;
     render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} onReady={a => (api = a)} />);
-    if (!api) throw new Error('API not initialized');
 
-    // Allow effects to create the ring buffer
+    // Wait for onReady and ring buffer initialization
     await act(async () => {
       await new Promise(res => setTimeout(res, 0));
     });
+    if (!api) throw new Error('API not initialized');
 
     const meta = makeMeta();
     act(() => api!.setMeta(meta));
@@ -83,11 +84,10 @@ describe('Spectrogram metadata handling', () => {
   it('rejects invalid metadata', async () => {
     let api: SpectrogramAPI | null = null;
     render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} onReady={a => (api = a)} />);
-    if (!api) throw new Error('API not initialized');
-
     await act(async () => {
       await new Promise(res => setTimeout(res, 0));
     });
+    if (!api) throw new Error('API not initialized');
 
     const badMeta = makeMeta({ binCount: 0 });
     expect(() => api!.setMeta(badMeta)).toThrow();
@@ -96,11 +96,10 @@ describe('Spectrogram metadata handling', () => {
   it('rejects frames with mismatched bin counts', async () => {
     let api: SpectrogramAPI | null = null;
     render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} onReady={a => (api = a)} />);
-    if (!api) throw new Error('API not initialized');
-
     await act(async () => {
       await new Promise(res => setTimeout(res, 0));
     });
+    if (!api) throw new Error('API not initialized');
 
     const meta = makeMeta();
     act(() => api!.setMeta(meta));
@@ -120,4 +119,18 @@ describe('Spectrogram metadata handling', () => {
     const div = container.firstChild as HTMLElement;
     expect(getComputedStyle(div).backgroundColor).toBe(hexToRgb(DEFAULT_BG));
   });
+});
+
+/**
+ * Regression test ensuring we do not create multiple WebGL contexts.
+ * What: Tracks HTMLCanvasElement.getContext invocations.
+ * Why: Prevents redundant context allocation which leaks GPU resources.
+ */
+it('creates WebGL context only once', async () => {
+  getContextStub.mockClear();
+  render(<Spectrogram config={{ autoGenerate: false, showLegend: false }} />);
+  await act(async () => {
+    await new Promise(res => setTimeout(res, 0));
+  });
+  expect(getContextStub.mock.calls.length).toBeLessThanOrEqual(1);
 });

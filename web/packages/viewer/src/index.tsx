@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Canvas } from '@react-three/fiber';
+import type { WebGLRenderer } from 'three';
 import { SpectroRingBuffer } from './core/ring-buffer';
 import { Heatmap2D } from './renderers/heatmap-2d';
 import { Legend } from './ui/legend';
@@ -50,6 +51,10 @@ const MIN_FREQ_STEP_HZ = 1e-12;
 const DEFAULT_TIME_WINDOW_SEC = 10;
 /** Default duration in seconds for synthetic data generation. */
 const DEFAULT_DATA_DURATION_SECONDS = 30;
+/** Default FFT bin count used before metadata is available. */
+const DEFAULT_BIN_COUNT = 1025;
+/** Default maximum number of rows allocated prior to metadata. */
+const DEFAULT_MAX_ROWS = 512;
 
 /**
  * Validate incoming spectrogram metadata and fail fast on invalid values.
@@ -130,6 +135,7 @@ export interface SpectrogramAPI {
   pushFrame(frame: SpectroFrame): void;
   pushFrames(frames: SpectroFrame[]): void;
   clear(): void;
+  /** Resize the underlying canvas and renderer. */
   resize(): void;
   exportPNG(opts?: { view?: ViewMode }): Promise<Blob>;
   stats(): { fps: number; dropped: number; rows: number; bins: number };
@@ -152,15 +158,20 @@ export type SpectrogramProps = {
  * What: Provides a complete spectrogram visualization with real-time updates.
  * Why: Combines WASM processing, GPU rendering, and interactive controls.
  */
-export const Spectrogram: React.FC<SpectrogramProps> = ({ 
-  config = {}, 
-  className, 
-  style, 
+export const Spectrogram: React.FC<SpectrogramProps> = ({
+  config = {},
+  className,
+  style,
   onReady,
   onHover,
-  onClick 
+  onClick
 }) => {
   const canvasRef = React.useRef<HTMLDivElement>(null);
+  /** Renderer supplied by react-three-fiber. */
+  const rendererRef = React.useRef<WebGLRenderer | null>(null);
+  /** WebGL context owned by the renderer. */
+  const glRef = React.useRef<WebGLRenderingContext | null>(null);
+  /** Shared ring buffer instance backing the visualization. */
   const ringBufferRef = React.useRef<SpectroRingBuffer | null>(null);
   /**
    * Handle to the interval generating synthetic data.
@@ -183,31 +194,53 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     autoGenerate: true,
     ...config
   });
+  /** Flag indicating the rendering pipeline is initialized. */
+  const [ready, setReady] = React.useState(false);
 
-  // Initialize ring buffer when config changes
-  React.useEffect(() => {
-    if (!canvasRef.current) return;
-
-    const canvas = canvasRef.current.querySelector('canvas');
-    if (!canvas) return;
-
-    const gl = canvas.getContext('webgl');
+  /**
+   * (Re)create the GPU ring buffer using the current WebGL context.
+   * What: Initializes SpectroRingBuffer with sane defaults.
+   * Why: Avoids duplicate context creation and centralizes setup.
+   */
+  const initRingBuffer = React.useCallback(() => {
+    const gl = glRef.current;
     if (!gl) return;
 
-    const maxRows = currentConfig.maxRows ?? 512;
-    const binCount = 1025; // Default FFT bins
+    // Dispose any previous buffer to free GPU resources
+    ringBufferRef.current?.dispose();
+
+    const maxRows = currentConfig.maxRows ?? DEFAULT_MAX_ROWS;
 
     ringBufferRef.current = new SpectroRingBuffer(gl, {
-      binCount,
+      binCount: DEFAULT_BIN_COUNT,
       maxRows,
       format: 'R32F',
       linearFilter: true
     });
 
-    return () => {
-      ringBufferRef.current?.dispose();
-    };
+    setReady(true);
   }, [currentConfig.maxRows]);
+
+  // Reinitialize buffer whenever configuration or context changes
+  React.useEffect(() => {
+    initRingBuffer();
+    return () => ringBufferRef.current?.dispose();
+  }, [initRingBuffer]);
+
+  /**
+   * Fallback initialization for test environments where Canvas onCreated may not fire.
+   * What: Attempts to obtain the WebGL context directly from the DOM canvas.
+   * Why: Ensures ring buffer exists even without a renderer, without creating a second context.
+   */
+  React.useEffect(() => {
+    if (glRef.current || !canvasRef.current) return;
+    const canvas = canvasRef.current.querySelector('canvas');
+    const gl = canvas?.getContext('webgl');
+    if (gl) {
+      glRef.current = gl;
+      initRingBuffer();
+    }
+  }, [initRingBuffer]);
 
 
 
@@ -248,7 +281,14 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
       ringBufferRef.current?.clear();
     },
     resize() {
-      // TODO: Handle resize
+      const renderer = rendererRef.current;
+      if (!renderer) return;
+
+      const { width = 800, height = 400 } = currentConfig;
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        throw new Error('Invalid canvas dimensions');
+      }
+      renderer.setSize(width, height, false);
     },
     async exportPNG() {
       const canvas = canvasRef.current?.querySelector('canvas');
@@ -353,8 +393,8 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   }, [currentConfig.autoGenerate, currentConfig.dataDuration]);
 
   React.useEffect(() => {
-    if (onReady) onReady(apiRef.current);
-  }, [onReady]);
+    if (ready && onReady) onReady(apiRef.current);
+  }, [ready, onReady]);
 
   const { width = 800, height = 400, background = DEFAULT_BG } = currentConfig;
 
@@ -374,6 +414,11 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
       <Canvas
         camera={{ position: [0, 0, 1], fov: 75 }}
         style={{ width: '100%', height: '100%' }}
+        onCreated={({ gl }) => {
+          rendererRef.current = gl;
+          glRef.current = gl.getContext();
+          initRingBuffer();
+        }}
       >
         {ringBufferRef.current && (
           <Heatmap2D
