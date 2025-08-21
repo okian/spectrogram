@@ -6,6 +6,11 @@
 
 import * as THREE from 'three';
 
+/** Maximum value of an unsigned 8-bit integer for normalization. */
+const UINT8_MAX = 255;
+/** Maximum value of an unsigned 16-bit integer for normalization. */
+const UINT16_MAX = 65535;
+
 /** Ring buffer configuration. */
 export interface RingBufferConfig {
   /** Number of frequency bins per row. */
@@ -30,13 +35,16 @@ export class SpectroRingBuffer {
   private writeRow = 0;
   private rowCount = 0;
   private config: RingBufferConfig;
+  /** Scratch buffer reused for integer-to-float conversion. */
+  private scratch: Float32Array;
 
   constructor(gl: WebGLRenderingContext, config: RingBufferConfig) {
     this.gl = gl;
     this.config = config;
     
-    // Allocate data buffer
+    // Allocate data buffer and scratch space
     this.data = new Float32Array(config.binCount * config.maxRows);
+    this.scratch = new Float32Array(config.binCount);
     
     // Create GPU texture
     this.texture = new THREE.DataTexture(
@@ -62,23 +70,27 @@ export class SpectroRingBuffer {
    */
   pushRow(bins: Float32Array | Uint16Array | Uint8Array): void {
     const { binCount, maxRows } = this.config;
-    
-    // Convert to float32 if needed
+
+    if (bins.length !== binCount) {
+      throw new Error(`Expected ${binCount} bins, received ${bins.length}`);
+    }
+
+    // Convert to float32 if needed without allocating each call
     let floatBins: Float32Array;
     if (bins instanceof Float32Array) {
       floatBins = bins;
     } else if (bins instanceof Uint16Array) {
-      floatBins = new Float32Array(bins.length);
-      for (let i = 0; i < bins.length; i++) {
-        floatBins[i] = bins[i] / 65535.0; // Normalize to [0,1]
+      for (let i = 0; i < binCount; i++) {
+        this.scratch[i] = bins[i] / UINT16_MAX;
       }
+      floatBins = this.scratch;
     } else {
-      floatBins = new Float32Array(bins.length);
-      for (let i = 0; i < bins.length; i++) {
-        floatBins[i] = bins[i] / 255.0; // Normalize to [0,1]
+      for (let i = 0; i < binCount; i++) {
+        this.scratch[i] = bins[i] / UINT8_MAX;
       }
+      floatBins = this.scratch;
     }
-    
+
     // Copy data to ring buffer
     const offset = this.writeRow * binCount;
     this.data.set(floatBins, offset);
@@ -136,8 +148,9 @@ export class SpectroRingBuffer {
       return; // No change needed
     }
     
-    // Reallocate data buffer
+    // Reallocate data buffer and scratch space
     this.data = new Float32Array(binCount * maxRows);
+    this.scratch = new Float32Array(binCount);
     
     // Recreate GPU texture
     this.texture.dispose();
