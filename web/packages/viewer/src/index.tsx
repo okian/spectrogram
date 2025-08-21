@@ -148,9 +148,10 @@ export type SpectrogramProps = {
   config?: SpectroConfig;
   className?: string;
   style?: React.CSSProperties;
+  /** Callback fired once the renderer is ready and API initialized. */
   onReady?(api: SpectrogramAPI): void;
+  /** Callback delivering cursor sample information during hover interactions. */
   onHover?(p: { timeSec: number; freqHz: number; mag: number; magDb?: number; bin: number; row: number }): void;
-  onClick?(p: any): void;
 };
 
 /**
@@ -163,8 +164,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   className,
   style,
   onReady,
-  onHover,
-  onClick
+  onHover
 }) => {
   const canvasRef = React.useRef<HTMLDivElement>(null);
   /** Renderer supplied by react-three-fiber. */
